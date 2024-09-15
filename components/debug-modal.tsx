@@ -18,16 +18,15 @@ export default function DebugModal(props: DebugModalProps) {
 
   return (
     <Modal
-      key='debugModal'
       visible={props.visible}
       onDismiss={props.onClose}
       style={{padding: 0}}
     >
-      <View style={{backgroundColor: "white", padding: 20, borderRadius: 10, height: '80%'}}>
-        <ScrollView contentContainerStyle={{flex: 1}}>
+      <View style={{backgroundColor: "white", padding: 20, borderRadius: 10}}>
+        <ScrollView style={{paddingBottom: 20}}>
           <TextInput value={debugTrackerText} multiline={true} onChangeText={(text) => setDebugTrackerText(text)}/>
-          <Button mode='contained' style={{marginTop: "auto"}} onPress={() => props.updateTrackerData(JSON.parse(debugTrackerText))}>Update Data</Button>
         </ScrollView>
+        <Button mode='contained' style={{marginTop: "auto"}} onPress={() => props.updateTrackerData(JSON.parse(debugTrackerText))}>Update Data</Button>
       </View>
     </Modal>
   );

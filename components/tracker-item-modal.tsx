@@ -31,7 +31,7 @@ export default function TrackerItemModal(props: TrackerItemModalProps) {
         style={{padding: 0}}
       >
         <View style={{backgroundColor: "white", padding: 20, borderRadius: 10}}>
-          <TextInput label="Name" mode="outlined" autoFocus={true}
+          <TextInput label="Name" mode="outlined" autoFocus={false}
                      onChangeText={text => setTrackerText(text)}
                      onSubmitEditing={() => props.onSubmit(trackerText, trackerType)}/>
 
