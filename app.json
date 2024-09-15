@@ -41,6 +41,12 @@
       "eas": {
         "projectId": "cabe577a-afeb-4c25-b255-318cb97a156a"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/cabe577a-afeb-4c25-b255-318cb97a156a"
     }
   }
 }

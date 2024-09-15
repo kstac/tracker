@@ -1,6 +1,6 @@
-import {Pressable, ScrollView, StyleSheet, View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {useEffect, useState} from "react";
-import {Button, IconButton, List, Modal, Text, TextInput} from "react-native-paper";
+import {Button, Icon, List} from "react-native-paper";
 import {Tracker, TrackerType} from "@/constants/Tracker";
 import {getTrackerData, storeTrackerData} from "@/util/Storage";
 import TrackerItemModal from "@/components/tracker-item-modal";
@@ -45,31 +45,42 @@ export default function HomeScreen() {
   // TODO - Move items into their own component
   const trackerItems = storedTrackers.map((storedTracker) => {
     return (
-      <List.Item title={storedTracker.label} titleStyle={{fontWeight: 'bold'}}
-                 right={() => {
-                   return (
-                     <View style={{flexDirection: 'row', alignItems:'center'}}>
-                       <IconButton icon='minus' mode='contained' onPress={() => changeCount(storedTracker.label, -1)}/>
-                       <Text>{storedTracker.dateAwareValues[new Date().toLocaleDateString()] || 0}</Text>
-                       <IconButton icon='plus' mode='contained' onPress={() => changeCount(storedTracker.label, 1)}/>
-                     </View>
-                   );
-                 }}
-      />
+        <List.Item title={storedTracker.label} titleStyle={{fontWeight: 'bold'}}
+                   style={{flexDirection: 'row', paddingLeft: '3%', paddingRight: '3%', margin: '1%', backgroundColor: "white", borderRadius: 10}}
+                   left={() => {
+                     return (
+                       <View style={{flexDirection: 'row', alignItems:'center'}}>
+                         <Icon source={'reorder-horizontal'} size={10}/>
+                       </View>
+                     );
+                   }}
+                   right={() => {
+                     return (
+                       <View style={{flexDirection: 'row', alignItems:'center'}}>
+                         <Button mode={'outlined'}
+                                 style={{margin: 10}}
+                                 labelStyle={{marginHorizontal: 5, marginVertical: 3}}
+                                 compact={true}
+                                 onPress={() => changeCount(storedTracker.label, 1)}>
+                           {storedTracker.dateAwareValues[new Date().toLocaleDateString()] || 0}
+                         </Button>
+                       </View>
+                     );
+                   }}
+        />
     );
   });
 
   return (
     <View style={styles.container}>
-      <Pressable onPress={() => setModalVisible(!modalVisible)}>
-        <Text style={styles.buttonText}>Add new item to track</Text>
-      </Pressable>
-
       {/*TODO - Move section into it's own component*/}
-      <List.Section>
+      <List.Section style={{position: 'absolute'}}>
         {trackerItems}
       </List.Section>
-      <Button mode='contained' onPress={() => setDebugModalVisible(true)}>Raw Data</Button>
+      <View style={{flexDirection: 'row', marginTop: 'auto', marginBottom: 10}}>
+        <Button mode='contained' onPress={() => setDebugModalVisible(true)}>Raw Data</Button>
+        <Button mode='contained' onPress={() => setModalVisible(true)}>New item</Button>
+      </View>
 
       <TrackerItemModal
         visible={modalVisible}
