@@ -5,11 +5,13 @@ import {Tracker, TrackerType} from "@/constants/Tracker";
 import {getTrackerData, storeTrackerData} from "@/util/Storage";
 import TrackerItemModal from "@/components/tracker-item-modal";
 import DebugModal from "@/components/debug-modal";
+import AppBar from "@/components/app-bar";
 
 export default function HomeScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [debugModalVisible, setDebugModalVisible] = useState(false);
   const [storedTrackers, setStoredTrackers] = useState<Tracker[]>([]);
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   useEffect(() => {
     getTrackerData().then((tracker) => setStoredTrackers([...tracker]));
@@ -33,7 +35,7 @@ export default function HomeScreen() {
     const newTrackers: Tracker[] = [];
     for (let tracker of storedTrackers) {
       if (tracker.label === label) {
-        const currentDate = new Date().toLocaleDateString();
+        const currentDate = selectedDate.toLocaleDateString();
         tracker.dateAwareValues[currentDate] = (tracker.dateAwareValues[currentDate] || 0) + value
       }
       newTrackers.push(tracker);
@@ -62,7 +64,7 @@ export default function HomeScreen() {
                                  labelStyle={{marginHorizontal: 5, marginVertical: 3}}
                                  compact={true}
                                  onPress={() => changeCount(storedTracker.label, 1)}>
-                           {storedTracker.dateAwareValues[new Date().toLocaleDateString()] || 0}
+                           {storedTracker.dateAwareValues[selectedDate.toLocaleDateString()] || 0}
                          </Button>
                        </View>
                      );
@@ -73,14 +75,16 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      <AppBar
+        title={selectedDate.toLocaleDateString()}
+        onLeftAction={() => setDebugModalVisible(true)}
+        onRightAction={() => setModalVisible(true)}
+      />
+
       {/*TODO - Move section into it's own component*/}
-      <List.Section style={{position: 'absolute'}}>
+      <List.Section>
         {trackerItems}
       </List.Section>
-      <View style={{flexDirection: 'row', marginTop: 'auto', marginBottom: 10}}>
-        <Button mode='contained' onPress={() => setDebugModalVisible(true)}>Raw Data</Button>
-        <Button mode='contained' onPress={() => setModalVisible(true)}>New item</Button>
-      </View>
 
       <TrackerItemModal
         visible={modalVisible}
@@ -101,8 +105,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   buttonText: {
     fontSize: 18,
