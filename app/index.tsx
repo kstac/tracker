@@ -1,6 +1,6 @@
 import {StyleSheet, View} from 'react-native';
 import {useEffect, useState} from "react";
-import {Button, Icon, List} from "react-native-paper";
+import {Button, Icon, List, Text} from "react-native-paper";
 import {Tracker, TrackerType} from "@/constants/Tracker";
 import {getTrackerData, storeTrackerData} from "@/util/Storage";
 import TrackerItemModal from "@/components/tracker-item-modal";
@@ -44,10 +44,20 @@ export default function HomeScreen() {
     storeTrackerData(newTrackers);
   }
 
+  const parseAusDate = (date: string): number => {
+    const dateParts = date.split("/");
+    return Date.parse(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+  }
+
+  const daysBetweenDates = (firstDate: string, secondDate: string) => {
+    const deltaMillis = parseAusDate(secondDate) - parseAusDate(firstDate);
+    return Math.ceil(deltaMillis / (1000 * 60 * 60 * 24));
+  }
+
   // TODO - Move items into their own component
   const trackerItems = storedTrackers.map((storedTracker) => {
     return (
-        <List.Item title={storedTracker.label} titleStyle={{fontWeight: 'bold'}}
+        <List.Item title={storedTracker.label} description={daysBetweenDates(Object.keys(storedTracker.dateAwareValues).slice(-1)[0], selectedDate.toLocaleDateString())} titleStyle={{fontWeight: 'bold'}}
                    style={{flexDirection: 'row', paddingLeft: '3%', paddingRight: '3%', margin: '1%', backgroundColor: "white", borderRadius: 10}}
                    left={() => {
                      return (
