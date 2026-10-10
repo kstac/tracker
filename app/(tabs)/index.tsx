@@ -14,7 +14,7 @@ import SyncStatus from '@/components/SyncStatus';
 import {Panel, PanelHeader, SectionHeader} from '@/components/ui/Panel';
 import {computeBedtimeShift, computeSleepDebt, Score} from '@/insights';
 import SleepDebtPanel, {shiftText} from '@/components/SleepDebtPanel';
-import {formatClock, formatMinutes, minutesFromMidnight, parseIsoDate, today} from '@/lib/dates';
+import {formatClock, formatMinutes, minutesFromMidnight, nightLabel, parseIsoDate, today} from '@/lib/dates';
 import {formatMetricValue} from '@/lib/format';
 import {METRIC_BY_ID} from '@/metrics/registry';
 import {MetricId, SleepNight, Tag} from '@/metrics/types';
@@ -150,7 +150,7 @@ export default function TodayScreen() {
       {lastNight && (
         <Panel onPress={() => router.push({pathname: '/metric/[id]', params: {id: 'sleep_total_min'}})}>
           <PanelHeader
-            title={lastNight.date === date ? 'Last night' : `Sleep · ${parseIsoDate(lastNight.date).toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'})}`}
+            title={lastNight.date === date ? 'Last night' : nightLabel(lastNight.date)}
             subtitle={`${formatClock(minutesFromMidnight(lastNight.startTs, lastNight.date))} → ${formatClock(minutesFromMidnight(lastNight.endTs, lastNight.date))}` +
               (bedtime && lastNight.date >= date ? ` · bed ${shiftText(bedtime.lastDelta)}` : '')}
             icon="weather-night"

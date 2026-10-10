@@ -6,7 +6,7 @@ import ScoreCard from '@/components/scores/ScoreCard';
 import WeeklySummaryPanel from '@/components/scores/WeeklySummaryPanel';
 import {SCORE_KINDS} from '@/components/scores/defs';
 import {useScoreHistory} from '@/components/scores/useScoreHistory';
-import {computeWeeklySummary} from '@/insights';
+import {lastCompletedWeek, weekToDate} from '@/insights';
 import {today} from '@/lib/dates';
 import SleepStagesChart from '@/components/charts/SleepStagesChart';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
@@ -24,7 +24,11 @@ export default function TrendsScreen() {
   const [category, setCategory] = useState<TrendsView>('scores');
   const history = useScoreHistory();
   const weekly = useMemo(
-    () => (category === 'scores' ? computeWeeklySummary({today: today(), daily, sleep, tags, tagEntries}, today()) : null),
+    () => {
+      if (category !== 'scores') return null;
+      const input = {today: today(), daily, sleep, tags, tagEntries};
+      return {current: weekToDate(input, input.today), previous: lastCompletedWeek(input, input.today)};
+    },
     [category, daily, sleep, tags, tagEntries],
   );
 
@@ -75,7 +79,7 @@ export default function TrendsScreen() {
 
       {category === 'scores' ? (
         <>
-          {weekly && <WeeklySummaryPanel summary={weekly} />}
+          {weekly && <WeeklySummaryPanel current={weekly.current} previous={weekly.previous} />}
           {SCORE_KINDS.map((k) => <ScoreCard key={k} kind={k} days={history.days} />)}
         </>
       ) : metrics.length === 0 ? (

@@ -36,8 +36,8 @@ export type DecideContext = {
 
 const MIN_AFTER_WAKE_MS = 20 * 60_000;
 const READINESS_LATEST_HOUR = 13;
-const WEEKLY_DAY = 0;
-const WEEKLY_HOUR = 18;
+const WEEKLY_DAY = 1;
+const WEEKLY_HOUR = 8;
 
 export function decideNotifications(ctx: DecideContext): Notice[] {
   const {now, prefs, sent, report} = ctx;
@@ -66,7 +66,7 @@ export function decideNotifications(ctx: DecideContext): Notice[] {
   }
 
   if (prefs.weekly && ctx.weeklyBody && now.getDay() === WEEKLY_DAY && now.getHours() >= WEEKLY_HOUR && notSentToday('weekly')) {
-    out.push({type: 'weekly', title: 'Your week in review', body: ctx.weeklyBody});
+    out.push({type: 'weekly', title: 'Last week in review', body: ctx.weeklyBody});
   }
 
   if (prefs.syncProblem && ctx.garminAuthBroken && notSentToday('sync_problem')) {

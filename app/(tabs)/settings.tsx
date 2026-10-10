@@ -308,7 +308,7 @@ export default function SettingsScreen() {
             <Divider />
             <ToggleRow title="Strain alerts" subtitle="When several signals suggest you're run down or getting sick" value={notif.strain} onChange={(v) => updateNotif({strain: v})} />
             <Divider />
-            <ToggleRow title="Weekly review" subtitle="A summary of your week on Sunday evening" value={notif.weekly} onChange={(v) => updateNotif({weekly: v})} />
+            <ToggleRow title="Weekly review" subtitle="A summary of last week on Monday morning" value={notif.weekly} onChange={(v) => updateNotif({weekly: v})} />
             <Divider />
             <ToggleRow title="Sync problems" subtitle="If Garmin signs the app out and data stops syncing" value={notif.syncProblem} onChange={(v) => updateNotif({syncProblem: v})} />
             <Text variant="bodySmall" style={{color: chart.inkMuted, marginTop: 8}}>

@@ -14,6 +14,7 @@ const def = (label: string, category: MetricCategory, icon: string): MetricDef =
   decimals: 0,
   chart: 'line',
   icon,
+  max: 100,
 });
 
 export const SCORE_DEFS: Record<ScoreKind, MetricDef> = {

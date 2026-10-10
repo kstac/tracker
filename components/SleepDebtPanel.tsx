@@ -3,7 +3,7 @@ import {Pressable, View} from 'react-native';
 import {Text} from 'react-native-paper';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
 import {BedtimeShift, SleepDebt} from '@/insights';
-import {formatClock, formatMinutes, parseIsoDate} from '@/lib/dates';
+import {formatClock, formatMinutes, nightLabel} from '@/lib/dates';
 import {useAppTheme} from '@/theme';
 
 const BAR_AREA = 36;
@@ -57,7 +57,7 @@ export default function SleepDebtPanel({debt, bedtime}: {debt: SleepDebt; bedtim
 
       <Text variant="bodySmall" style={{color: chart.inkSecondary, marginTop: 8}}>
         {sel
-          ? `${parseIsoDate(sel.date).toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'})} · ` +
+          ? `${nightLabel(sel.date)} · ` +
             (sel.asleepMin == null ? 'no sleep recorded' : `${formatMinutes(sel.asleepMin)} asleep (${sel.diffMin! >= 0 ? '+' : '−'}${formatMinutes(Math.abs(sel.diffMin!))})`)
           : 'Above the line: more than you need · below: less. Tap a night for details.'}
       </Text>

@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {View} from 'react-native';
 import {BarChart} from 'react-native-gifted-charts';
 import {Text} from 'react-native-paper';
-import {formatMinutes, parseIsoDate} from '@/lib/dates';
+import {formatMinutes, nightOf, nightLabel, parseIsoDate} from '@/lib/dates';
 import {SleepNight} from '@/metrics/types';
 import {useAppTheme} from '@/theme';
 import {useChartWidth} from '@/components/charts/useChartWidth';
@@ -25,7 +25,7 @@ export default function SleepStagesChart({nights, height = 180}: {nights: SleepN
   const barWidth = Math.max(4, slot * 0.65);
   const gap = 2;
   const stackData = nights.map((n, i) => ({
-    label: i % Math.ceil(nights.length / 5) === 0 ? parseIsoDate(n.date).toLocaleDateString(undefined, {day: 'numeric', month: 'short'}) : '',
+    label: i % Math.ceil(nights.length / 5) === 0 ? parseIsoDate(nightOf(n.date)).toLocaleDateString(undefined, {day: 'numeric', month: 'short'}) : '',
     onPress: () => setSelected(i),
     stacks: STAGES.map((s, si) => ({
       value: n[s.key] / 60,
@@ -49,7 +49,7 @@ export default function SleepStagesChart({nights, height = 180}: {nights: SleepN
       <View style={{minHeight: 20, marginBottom: 4}}>
         <Text variant="bodySmall" style={{color: sel ? chart.inkSecondary : chart.inkMuted}}>
           {sel
-            ? `${parseIsoDate(sel.date).toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'})} · ` +
+            ? `${nightLabel(sel.date)} · ` +
               STAGES.map((s) => `${s.label} ${formatMinutes(sel[s.key])}`).join(' · ')
             : 'Tap a night to see its stages'}
         </Text>

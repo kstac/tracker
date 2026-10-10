@@ -1,5 +1,6 @@
+import {useState} from 'react';
 import {View} from 'react-native';
-import {Text} from 'react-native-paper';
+import {SegmentedButtons, Text} from 'react-native-paper';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
 import {WeeklySummary} from '@/insights';
 import {formatMinutes, IsoDate, parseIsoDate} from '@/lib/dates';
@@ -7,9 +8,15 @@ import {useAppTheme} from '@/theme';
 
 const fmtShort = (d: IsoDate) => parseIsoDate(d).toLocaleDateString(undefined, {day: 'numeric', month: 'short'});
 
-export default function WeeklySummaryPanel({summary}: {summary: WeeklySummary}) {
+export default function WeeklySummaryPanel({current, previous}: {current: WeeklySummary; previous: WeeklySummary}) {
   const {chart, colors} = useAppTheme();
+  const [view, setView] = useState<'current' | 'previous'>('current');
+  const summary = view === 'current' ? current : previous;
   const {thisWeek: a, lastWeek: b} = summary;
+  const subtitle = summary.partial
+    ? `${fmtShort(a.from)} – ${fmtShort(a.to)} vs the same days last week`
+    : `${fmtShort(a.from)} – ${fmtShort(a.to)} vs the week before`;
+  const cols = view === 'current' ? ['This week', 'Last week'] : ['Last week', 'Week before'];
   const rows: {label: string; now: string; before: string}[] = [
     {label: 'Readiness', now: num(a.readiness), before: num(b.readiness)},
     {label: 'Sleep score', now: num(a.sleepScore), before: num(b.sleepScore)},
@@ -21,7 +28,14 @@ export default function WeeklySummaryPanel({summary}: {summary: WeeklySummary}) 
 
   return (
     <Panel>
-      <PanelHeader title="This week" subtitle={`${fmtShort(a.from)} – ${fmtShort(a.to)} vs the week before`} icon="calendar-week" color={colors.primary} />
+      <PanelHeader title={view === 'current' ? (summary.partial ? 'This week so far' : 'This week') : 'Last week'} subtitle={subtitle} icon="calendar-week" color={colors.primary} />
+      <SegmentedButtons
+        value={view}
+        onValueChange={(v) => setView(v as 'current' | 'previous')}
+        density="small"
+        style={{marginBottom: 14}}
+        buttons={[{value: 'current', label: 'This week'}, {value: 'previous', label: 'Last week'}]}
+      />
       {summary.highlights.length > 0 ? (
         <View style={{gap: 8, marginBottom: 14}}>
           {summary.highlights.map((h) => (
@@ -37,8 +51,8 @@ export default function WeeklySummaryPanel({summary}: {summary: WeeklySummary}) 
       <View style={{borderTopWidth: 1, borderTopColor: chart.grid, paddingTop: 10, gap: 6}}>
         <View style={{flexDirection: 'row'}}>
           <View style={{flex: 1}} />
-          <Text variant="labelSmall" style={{width: 72, textAlign: 'right', color: chart.inkMuted}}>This week</Text>
-          <Text variant="labelSmall" style={{width: 72, textAlign: 'right', color: chart.inkMuted}}>Last week</Text>
+          <Text variant="labelSmall" style={{width: 72, textAlign: 'right', color: chart.inkMuted}}>{cols[0]}</Text>
+          <Text variant="labelSmall" style={{width: 72, textAlign: 'right', color: chart.inkMuted}}>{cols[1]}</Text>
         </View>
         {rows.map((r) => (
           <View key={r.label} style={{flexDirection: 'row'}}>

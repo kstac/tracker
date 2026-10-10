@@ -49,12 +49,12 @@ describe('decideNotifications', () => {
     expect(decideNotifications(ctx({prefs: {...DEFAULT_PREFS, readiness: false, strain: false}}))).toEqual([]);
   });
 
-  it('sends the weekly review on Sunday evening and sync problems once a day', () => {
-    const sunday = new Date(2026, 9, 11, 19);
+  it('sends the weekly review on Monday morning and sync problems once a day', () => {
+    const monday = new Date(2026, 9, 12, 9);
     expect(
-      decideNotifications(ctx({now: sunday, report: null, lastWakeTs: null, weeklyBody: 'Sleep up 20 min', garminAuthBroken: true})),
+      decideNotifications(ctx({now: monday, report: null, lastWakeTs: null, weeklyBody: 'Sleep up 20 min', garminAuthBroken: true})),
     ).toEqual([
-      {type: 'weekly', title: 'Your week in review', body: 'Sleep up 20 min'},
+      {type: 'weekly', title: 'Last week in review', body: 'Sleep up 20 min'},
       {type: 'sync_problem', title: 'Garmin needs you to sign in again', body: 'Body Battery, stress and sleep score have stopped syncing. Open Settings to sign in.'},
     ]);
   });

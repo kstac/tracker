@@ -1,6 +1,7 @@
 import {describe, expect, it} from '@jest/globals';
 import {addDays} from '@/lib/dates';
-import {computeWeeklySummary, InsightInput} from '@/insights';
+import {computeWeeklySummary, InsightInput, lastCompletedWeek, weekToDate} from '@/insights';
+import {weekStart} from '@/insights/tagStats';
 import {daily, fromValues, night, TODAY} from '@/insights/__fixtures__/series';
 
 const twoWeeks = (last: number[], current: number[]) => fromValues(TODAY, [...last, ...current]);
@@ -27,7 +28,7 @@ function input(): InsightInput {
 
 describe('computeWeeklySummary', () => {
   it('compares the last 7 days with the 7 before', () => {
-    const summary = computeWeeklySummary(input(), TODAY);
+    const summary = computeWeeklySummary(input(), addDays(TODAY, -6), TODAY);
     const {readiness, sleepScore, activity, bestNight, worstNight, ...thisWeek} = summary.thisWeek;
     expect(thisWeek).toEqual({
       from: addDays(TODAY, -6),
@@ -50,9 +51,9 @@ describe('computeWeeklySummary', () => {
   });
 
   it('writes highlights for meaningful changes, biggest first', () => {
-    expect(computeWeeklySummary(input(), TODAY).highlights).toEqual([
+    expect(computeWeeklySummary(input(), addDays(TODAY, -6), TODAY).highlights).toEqual([
       'You slept 40m more per night than last week (7h 40m average).',
-      'You walked 33% more, about 8,000 steps a day.',
+      'You walked 33% more than last week, about 8,000 steps a day.',
       'Resting heart rate dropped 3 bpm to 53 bpm.',
       'You hit 175 intensity minutes, above the 150-minute weekly target.',
     ]);
@@ -60,7 +61,7 @@ describe('computeWeeklySummary', () => {
 
   it('handles a week with no data', () => {
     const empty: InsightInput = {today: TODAY, daily: {}, sleep: [], tags: [], tagEntries: []};
-    expect(computeWeeklySummary(empty, TODAY)).toEqual({
+    expect(computeWeeklySummary(empty, addDays(TODAY, -6), TODAY)).toEqual({
       thisWeek: {
         from: addDays(TODAY, -6), to: TODAY, readiness: null, sleepScore: null, activity: null, sleepMin: null, bedtimeSd: null,
         stepsPerDay: null, intensityMin: null, restingHr: null, stress: null, bestNight: null, worstNight: null,
@@ -70,6 +71,19 @@ describe('computeWeeklySummary', () => {
         stepsPerDay: null, intensityMin: null, restingHr: null, stress: null, bestNight: null, worstNight: null,
       },
       highlights: [],
+      partial: false,
+    });
+  });
+
+  it('uses calendar weeks: week to date against the same days last week, and the last full week', () => {
+    const wtd = weekToDate(input(), TODAY);
+    const monday = weekStart(TODAY);
+    expect({from: wtd.thisWeek.from, to: wtd.thisWeek.to, lastFrom: wtd.lastWeek.from, lastTo: wtd.lastWeek.to, partial: wtd.partial}).toEqual({
+      from: monday, to: TODAY, lastFrom: addDays(monday, -7), lastTo: addDays(TODAY, -7), partial: TODAY !== addDays(monday, 6),
+    });
+    const full = lastCompletedWeek(input(), TODAY);
+    expect({from: full.thisWeek.from, to: full.thisWeek.to, lastFrom: full.lastWeek.from, partial: full.partial}).toEqual({
+      from: addDays(monday, -7), to: addDays(monday, -1), lastFrom: addDays(monday, -14), partial: false,
     });
   });
 });

@@ -1,7 +1,7 @@
 import {Platform} from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as repo from '@/db/repo';
-import {computeInsights, computeWeeklySummary} from '@/insights';
+import {computeInsights, lastCompletedWeek} from '@/insights';
 import {today} from '@/lib/dates';
 import {DEFAULT_PREFS, decideNotifications, NotificationPrefs, NotificationType} from '@/lib/notifications/decide';
 import {lastSyncReport} from '@/sync';
@@ -89,7 +89,7 @@ export async function runNotificationChecks({foreground}: {foreground: boolean})
     report: insights,
     lastWakeTs: sleep.length ? sleep[sleep.length - 1].endTs : null,
     garminAuthBroken: report?.garmin.status === 'error' && !!report.garmin.authBroken,
-    weeklyBody: computeWeeklySummary(input, input.today).highlights.slice(0, 2).join(' ') || null,
+    weeklyBody: lastCompletedWeek(input, input.today).highlights.slice(0, 2).join(' ') || null,
   });
   if (!notices.length) return;
 

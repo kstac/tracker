@@ -16,6 +16,8 @@ export type MetricDef = {
   format?: 'duration' | 'clock';
   chart: 'line' | 'bar';
   icon: string;
+  /** Upper bound of the scale, e.g. 100 for scores and percentages, so charts never run past it. */
+  max?: number;
 };
 
 const GARMIN_FIRST: Source[] = ['garmin', 'health_connect', 'import'];
@@ -34,31 +36,31 @@ const RAW_METRICS: Omit<MetricDef, 'icon'>[] = [
   {id: 'hr_min', label: 'Lowest heart rate', unit: 'bpm', category: 'heart', rollup: 'mean', higherIsBetter: false, sources: HC_FIRST, decimals: 0, chart: 'line'},
   {id: 'hr_max', label: 'Highest heart rate', unit: 'bpm', category: 'heart', rollup: 'mean', higherIsBetter: null, sources: HC_FIRST, decimals: 0, chart: 'line'},
   {id: 'hrv_overnight', label: 'Overnight HRV', unit: 'ms', category: 'recovery', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
-  {id: 'stress_avg', label: 'Average stress', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: false, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
-  {id: 'stress_max', label: 'Peak stress', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: false, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
-  {id: 'sleep_stress', label: 'Overnight stress', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: false, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
-  {id: 'body_battery_high', label: 'Body Battery high', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
-  {id: 'body_battery_low', label: 'Body Battery low', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
-  {id: 'body_battery_wake', label: 'Body Battery at wake', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
-  {id: 'body_battery_charged', label: 'Body Battery charged', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'bar'},
-  {id: 'body_battery_drained', label: 'Body Battery drained', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 0, chart: 'bar'},
+  {id: 'stress_avg', label: 'Average stress', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: false, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
+  {id: 'stress_max', label: 'Peak stress', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: false, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
+  {id: 'sleep_stress', label: 'Overnight stress', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: false, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
+  {id: 'body_battery_high', label: 'Body Battery high', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
+  {id: 'body_battery_low', label: 'Body Battery low', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
+  {id: 'body_battery_wake', label: 'Body Battery at wake', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
+  {id: 'body_battery_charged', label: 'Body Battery charged', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'bar', max: 100},
+  {id: 'body_battery_drained', label: 'Body Battery drained', unit: '', category: 'recovery', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 0, chart: 'bar', max: 100},
   {id: 'sleep_total_min', label: 'Total sleep', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, format: 'duration', chart: 'bar'},
   {id: 'sleep_deep_min', label: 'Deep sleep', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, format: 'duration', chart: 'bar'},
   {id: 'sleep_light_min', label: 'Light sleep', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 0, format: 'duration', chart: 'bar'},
   {id: 'sleep_rem_min', label: 'REM sleep', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, format: 'duration', chart: 'bar'},
   {id: 'sleep_awake_min', label: 'Awake time', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: false, sources: GARMIN_FIRST, decimals: 0, format: 'duration', chart: 'bar'},
-  {id: 'sleep_efficiency', label: 'Sleep efficiency', unit: '%', category: 'sleep', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
+  {id: 'sleep_efficiency', label: 'Sleep efficiency', unit: '%', category: 'sleep', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
   {id: 'sleep_start', label: 'Bedtime', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 0, format: 'clock', chart: 'line'},
   {id: 'sleep_end', label: 'Wake time', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 0, format: 'clock', chart: 'line'},
   {id: 'sleep_midpoint', label: 'Sleep midpoint', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 0, format: 'clock', chart: 'line'},
-  {id: 'sleep_score', label: 'Sleep score', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: true, sources: ['import'], decimals: 0, chart: 'line'},
+  {id: 'sleep_score', label: 'Sleep score', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: true, sources: ['import'], decimals: 0, chart: 'line', max: 100},
   {id: 'garmin_sleep_need', label: 'Garmin sleep need', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 0, format: 'duration', chart: 'line'},
   {id: 'nap_min', label: 'Naps', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 0, format: 'duration', chart: 'bar'},
-  {id: 'garmin_sleep_score', label: 'Garmin sleep score', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
+  {id: 'garmin_sleep_score', label: 'Garmin sleep score', unit: '', category: 'sleep', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
   {id: 'respiration_avg', label: 'Respiration', unit: 'brpm', category: 'heart', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 1, chart: 'line'},
   {id: 'respiration_sleep', label: 'Sleep respiration', unit: 'brpm', category: 'sleep', rollup: 'mean', higherIsBetter: null, sources: GARMIN_FIRST, decimals: 1, chart: 'line'},
-  {id: 'spo2_avg', label: 'Pulse Ox', unit: '%', category: 'heart', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
-  {id: 'spo2_low', label: 'Lowest Pulse Ox', unit: '%', category: 'heart', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
+  {id: 'spo2_avg', label: 'Pulse Ox', unit: '%', category: 'heart', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
+  {id: 'spo2_low', label: 'Lowest Pulse Ox', unit: '%', category: 'heart', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line', max: 100},
   {id: 'vo2max', label: 'VO2 max', unit: 'ml/kg/min', category: 'heart', rollup: 'mean', higherIsBetter: true, sources: GARMIN_FIRST, decimals: 0, chart: 'line'},
   {id: 'weight_kg', label: 'Weight', unit: 'kg', category: 'body', rollup: 'mean', higherIsBetter: null, sources: HC_FIRST, decimals: 1, chart: 'line'},
 ];

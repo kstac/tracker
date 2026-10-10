@@ -80,3 +80,12 @@ export function formatClock(minutesFromMidnightValue: number): string {
   const total = ((Math.round(minutesFromMidnightValue) % 1440) + 1440) % 1440;
   return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
 }
+
+/** Sleep is stored under the wake-up date; people think of it as the night it started. */
+export function nightOf(wakeDate: IsoDate): IsoDate {
+  return addDays(wakeDate, -1);
+}
+
+export function nightLabel(wakeDate: IsoDate, opts: Intl.DateTimeFormatOptions = {weekday: 'short', day: 'numeric', month: 'short'}): string {
+  return `${parseIsoDate(nightOf(wakeDate)).toLocaleDateString(undefined, opts)} night`;
+}

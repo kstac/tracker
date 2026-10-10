@@ -28,7 +28,7 @@ function shortDate(date: IsoDate, bucket: Props['bucketLabel']) {
   return d.toLocaleDateString(undefined, {day: 'numeric', month: 'short'});
 }
 
-function niceRange(values: number[], zeroBased: boolean) {
+export function niceRange(values: number[], zeroBased: boolean, cap?: number) {
   let min = Math.min(...values);
   let max = Math.max(...values);
   if (zeroBased) min = Math.min(0, min);
@@ -40,6 +40,11 @@ function niceRange(values: number[], zeroBased: boolean) {
   const lo = zeroBased ? min : Math.floor(min - pad);
   const hi = Math.ceil(max + pad);
   const step = Math.max(1, Math.ceil((hi - lo) / SECTIONS));
+  if (cap != null && lo + step * SECTIONS > cap) {
+    const capped = Math.max(1, Math.ceil((cap - lo) / SECTIONS));
+    const top = lo + capped * SECTIONS;
+    return top > cap ? {lo: cap - capped * SECTIONS, step: capped, hi: cap} : {lo, step: capped, hi: top};
+  }
   return {lo, step, hi: lo + step * SECTIONS};
 }
 
@@ -50,7 +55,7 @@ export default function TrendChart({def, points, bucketLabel = 'day', average, h
   const lineColor = color ?? chart.series[0];
 
   const isBar = def.chart === 'bar';
-  const range = useMemo(() => (points.length ? niceRange(points.map((p) => p.value), isBar) : null), [points, isBar]);
+  const range = useMemo(() => (points.length ? niceRange(points.map((p) => p.value), isBar, def.max) : null), [points, isBar, def.max]);
 
   if (!ready) return <View onLayout={onLayout} style={{height: height + 40}} />;
 
