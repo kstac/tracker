@@ -1,8 +1,10 @@
-import {useCallback, useState} from 'react';
-import {Alert, ScrollView, View} from 'react-native';
+import {ReactNode, useCallback, useState} from 'react';
+import {Alert, Platform, ScrollView, View} from 'react-native';
 import {router, useFocusEffect} from 'expo-router';
-import {Button, Dialog, Portal, SegmentedButtons, Text} from 'react-native-paper';
+import {Button, Dialog, Divider, Menu, Portal, SegmentedButtons, Switch, Text} from 'react-native-paper';
 import {Panel, PanelHeader, SectionHeader} from '@/components/ui/Panel';
+import {backupSummary, exportBackup, pickBackup, restoreBackup} from '@/db/backup';
+import {DEFAULT_PREFS, getPrefs, NotificationPrefs, permissionGranted, requestPermission, setPrefs} from '@/lib/notifications';
 import {dumpDatabase, getLegacyImportReport, kvGet, LegacyImportReport, migrateLegacyTrackers} from '@/db/repo';
 import {clearTokens, loadTokens} from '@/garmin/auth';
 import {resetHealthConnectSyncState, SourceOutcome} from '@/sync';
@@ -53,6 +55,25 @@ function formatImportReport(r: LegacyImportReport | null) {
   return [`Imported ${new Date(r.at).toLocaleString()}`, ...lines].join('\n');
 }
 
+const REMINDER_TIMES = [19, 20, 21, 22].map((hour) => ({hour, minute: 0}));
+const pad = (n: number) => String(n).padStart(2, '0');
+
+function ToggleRow({title, subtitle, value, onChange, disabled, right}: {
+  title: string; subtitle: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean; right?: ReactNode;
+}) {
+  const {chart} = useAppTheme();
+  return (
+    <View style={{flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10}}>
+      <View style={{flex: 1}}>
+        <Text variant="bodyLarge" style={{color: disabled ? chart.inkMuted : chart.inkPrimary}}>{title}</Text>
+        <Text variant="bodySmall" style={{color: chart.inkSecondary}}>{subtitle}</Text>
+      </View>
+      {right}
+      <Switch value={value} onValueChange={onChange} disabled={disabled} />
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const {chart} = useAppTheme();
   const {preference, setPreference} = useThemePreference();
@@ -61,6 +82,9 @@ export default function SettingsScreen() {
   const [hcHistory, setHcHistory] = useState(false);
   const [garmin, setGarmin] = useState<{connected: boolean; name: string | null; hrv: string | null}>({connected: false, name: null, hrv: null});
   const [dialog, setDialog] = useState<{title: string; body: string} | null>(null);
+  const [notif, setNotif] = useState<NotificationPrefs>(DEFAULT_PREFS);
+  const [notifAllowed, setNotifAllowed] = useState(false);
+  const [timeMenu, setTimeMenu] = useState(false);
 
   const refresh = useCallback(async () => {
     const status = await getHealthConnectStatus();
@@ -68,7 +92,55 @@ export default function SettingsScreen() {
     setHcHistory(status === 'ready' && (await hasHistoryPermission()));
     const tokens = await loadTokens();
     setGarmin({connected: !!tokens, name: await kvGet('garmin.display_name'), hrv: await kvGet('garmin.hrv_support')});
+    setNotif(await getPrefs());
+    setNotifAllowed(await permissionGranted());
   }, []);
+
+  const updateNotif = async (patch: Partial<NotificationPrefs>) => {
+    const turningOn = Object.values(patch).some((v) => v === true);
+    if (turningOn && !notifAllowed) {
+      const granted = await requestPermission();
+      setNotifAllowed(granted);
+      if (!granted) {
+        Alert.alert('Notifications are off', 'Allow notifications for Health Tracker in Android settings to turn these on.');
+        return;
+      }
+    }
+    const next = {...notif, ...patch};
+    setNotif(next);
+    await setPrefs(next);
+  };
+
+  const backup = async () => {
+    try {
+      const summary = await exportBackup();
+      setDialog({title: 'Backup created', body: `Saved ${summary}.\n\nKeep the file somewhere off this phone, e.g. Google Drive.`});
+    } catch (e) {
+      setDialog({title: 'Backup failed', body: e instanceof Error ? e.message : String(e)});
+    }
+  };
+
+  const restore = async () => {
+    try {
+      const b = await pickBackup();
+      if (!b) return;
+      Alert.alert(
+        'Restore this backup?',
+        `From ${new Date(b.exportedAt).toLocaleString()}: ${backupSummary(b)}.\n\nThis replaces everything currently stored in the app.`,
+        [
+          {text: 'Cancel', style: 'cancel'},
+          {text: 'Restore', style: 'destructive', onPress: async () => {
+            await restoreBackup(b);
+            await reload();
+            setDialog({title: 'Restored', body: 'Your data has been restored. A sync will fill in anything newer.'});
+            sync().then(refresh);
+          }},
+        ],
+      );
+    } catch (e) {
+      setDialog({title: 'Restore failed', body: e instanceof Error ? e.message : String(e)});
+    }
+  };
 
   useFocusEffect(useCallback(() => {
     refresh();
@@ -200,6 +272,57 @@ export default function SettingsScreen() {
         <View style={{flexDirection: 'row', justifyContent: 'flex-end'}}>
           <Button onPress={resync} disabled={syncing}>Re-download history</Button>
           <Button mode="contained" loading={syncing} disabled={syncing} onPress={() => sync().then(refresh)}>Sync now</Button>
+        </View>
+      </Panel>
+
+      {Platform.OS !== 'web' && (
+        <>
+          <SectionHeader title="Notifications" />
+          <Panel>
+            <PanelHeader
+              title="Notifications"
+              subtitle={notifAllowed ? 'Choose what the app can tell you about' : 'Turning one on will ask for permission'}
+              icon="bell-outline"
+              color={chart.series[3]}
+            />
+            <ToggleRow title="Morning readiness" subtitle="Your readiness and sleep score shortly after you wake" value={notif.readiness} onChange={(v) => updateNotif({readiness: v})} />
+            <Divider />
+            <ToggleRow
+              title="Evening tag reminder"
+              subtitle={`A nudge to log today's tags at ${pad(notif.eveningTagsTime.hour)}:${pad(notif.eveningTagsTime.minute)}`}
+              value={notif.eveningTags}
+              onChange={(v) => updateNotif({eveningTags: v})}
+              right={
+                <Menu
+                  visible={timeMenu}
+                  onDismiss={() => setTimeMenu(false)}
+                  anchor={<Button compact onPress={() => setTimeMenu(true)}>{`${pad(notif.eveningTagsTime.hour)}:${pad(notif.eveningTagsTime.minute)}`}</Button>}
+                >
+                  {REMINDER_TIMES.map((t) => (
+                    <Menu.Item key={t.hour} title={`${pad(t.hour)}:00`} onPress={() => { setTimeMenu(false); updateNotif({eveningTagsTime: t}); }} />
+                  ))}
+                </Menu>
+              }
+            />
+            <Divider />
+            <ToggleRow title="Strain alerts" subtitle="When several signals suggest you're run down or getting sick" value={notif.strain} onChange={(v) => updateNotif({strain: v})} />
+            <Divider />
+            <ToggleRow title="Weekly review" subtitle="A summary of your week on Sunday evening" value={notif.weekly} onChange={(v) => updateNotif({weekly: v})} />
+            <Divider />
+            <ToggleRow title="Sync problems" subtitle="If Garmin signs the app out and data stops syncing" value={notif.syncProblem} onChange={(v) => updateNotif({syncProblem: v})} />
+            <Text variant="bodySmall" style={{color: chart.inkMuted, marginTop: 8}}>
+              Checks run in the background about once an hour, so morning and alert notifications can arrive a little after the data does.
+            </Text>
+          </Panel>
+        </>
+      )}
+
+      <SectionHeader title="Backup" />
+      <Panel>
+        <PanelHeader title="Backup & restore" subtitle="Your data only lives on this phone. Save a copy somewhere safe." icon="cloud-upload-outline" color={chart.series[0]} />
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
+          <Button onPress={restore}>Restore from file</Button>
+          <Button mode="contained" onPress={backup}>Back up now</Button>
         </View>
       </Panel>
 

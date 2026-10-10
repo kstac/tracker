@@ -3,8 +3,10 @@ import {AppState} from 'react-native';
 import * as repo from '@/db/repo';
 import {computeInsights, InsightReport} from '@/insights';
 import {today} from '@/lib/dates';
-import {DailyData, SleepNight, Tag, TagEntry} from '@/metrics/types';
+import {DailyData, SleepNight, Tag, TagEntry, TagUpdate} from '@/metrics/types';
 import {lastSyncReport, runSync, SyncProgress, SyncReport} from '@/sync';
+import {registerBackgroundSync} from '@/lib/backgroundSync';
+import {applySchedules, runNotificationChecks} from '@/lib/notifications';
 
 type AppData = {
   loading: boolean;
@@ -19,8 +21,8 @@ type AppData = {
   sync: () => Promise<void>;
   reload: () => Promise<void>;
   setTagValue: (tagId: string, date: string, value: number) => Promise<void>;
-  createTag: (name: string) => Promise<void>;
-  renameTag: (id: string, name: string) => Promise<void>;
+  createTag: (update: TagUpdate) => Promise<void>;
+  updateTag: (id: string, update: TagUpdate) => Promise<void>;
   deleteTag: (id: string) => Promise<void>;
 };
 
@@ -58,6 +60,7 @@ export function AppDataProvider({children}: {children: ReactNode}) {
     try {
       setLastSync(await runSync(setProgress));
       await reload();
+      runNotificationChecks({foreground: true}).catch(() => {});
     } finally {
       setSyncing(false);
       setProgress(null);
@@ -74,6 +77,8 @@ export function AppDataProvider({children}: {children: ReactNode}) {
       }
       lastAutoSync.current = Date.now();
       sync().catch(() => {});
+      registerBackgroundSync().catch(() => {});
+      applySchedules().catch(() => {});
     })();
   }, [reload, sync]);
 
@@ -95,13 +100,13 @@ export function AppDataProvider({children}: {children: ReactNode}) {
     await repo.setTagEntry(tagId, date, value);
   }, []);
 
-  const createTag = useCallback(async (name: string) => {
-    await repo.createTag(name);
+  const createTag = useCallback(async (update: TagUpdate) => {
+    await repo.createTag(update);
     await reloadTags();
   }, [reloadTags]);
 
-  const renameTag = useCallback(async (id: string, name: string) => {
-    await repo.renameTag(id, name);
+  const updateTag = useCallback(async (id: string, update: TagUpdate) => {
+    await repo.updateTag(id, update);
     await reloadTags();
   }, [reloadTags]);
 
@@ -122,7 +127,7 @@ export function AppDataProvider({children}: {children: ReactNode}) {
 
   const value: AppData = {
     loading, daily: dailyWithScores, sleep, tags, tagEntries, report, syncing, progress, lastSync,
-    sync, reload, setTagValue, createTag, renameTag, deleteTag,
+    sync, reload, setTagValue, createTag, updateTag, deleteTag,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

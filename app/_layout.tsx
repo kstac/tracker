@@ -1,4 +1,5 @@
 import 'react-native-reanimated';
+import '@/lib/backgroundSync';
 import {DarkTheme, DefaultTheme, Stack, ThemeProvider} from 'expo-router';
 import {StatusBar} from 'expo-status-bar';
 import {PaperProvider} from 'react-native-paper';

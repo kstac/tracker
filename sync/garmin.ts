@@ -18,6 +18,7 @@ const KV = {
   displayName: 'garmin.display_name',
   oldestSynced: 'garmin.oldest_synced',
   hrvSupport: 'garmin.hrv_support',
+  backfillDone: 'garmin.backfill_done',
 };
 
 const BACKFILL_DAYS = 365;
@@ -25,6 +26,7 @@ const BACKFILL_DAYS_PER_RUN = 45;
 const RECENT_DAYS = 3;
 const SAMPLE_DAYS = 14;
 const HRV_PROBE_DAYS = 5;
+const EMPTY_DAYS_TO_STOP_BACKFILL = 30;
 
 export type GarminProgress = {done: number; total: number; date: IsoDate};
 
@@ -67,7 +69,8 @@ async function syncDay(client: GarminClient, name: string, date: IsoDate, withSa
   }
 
   await upsertDaily(rows);
-  return {hrvFound};
+  const hasData = !!sleep.night || rows.some((r) => r.metric === 'steps' && r.value > 0);
+  return {hrvFound, hasData};
 }
 
 async function syncVo2Max(client: GarminClient, from: IsoDate, to: IsoDate) {
@@ -94,7 +97,8 @@ export async function syncGarmin(client: GarminClient, onProgress?: (p: GarminPr
     cursor = addDays(end, -SAMPLE_DAYS);
   }
   const backfill: IsoDate[] = [];
-  while (cursor >= target && backfill.length < BACKFILL_DAYS_PER_RUN) {
+  const backfillDone = !!(await kvGet(KV.backfillDone));
+  while (!backfillDone && cursor >= target && backfill.length < BACKFILL_DAYS_PER_RUN) {
     backfill.push(cursor);
     cursor = addDays(cursor, -1);
   }
@@ -103,10 +107,12 @@ export async function syncGarmin(client: GarminClient, onProgress?: (p: GarminPr
   let hrv = await hrvMode();
   let hrvEmpty = 0;
   let oldest = oldestSynced || null;
+  let emptyRun = 0;
+  let stoppedEarly = backfillDone;
   for (const [i, date] of all.entries()) {
     onProgress?.({done: i, total: all.length, date});
     const withSamples = date > addDays(end, -SAMPLE_DAYS);
-    const {hrvFound} = await syncDay(client, name, date, withSamples, hrv !== 'no');
+    const {hrvFound, hasData} = await syncDay(client, name, date, withSamples, hrv !== 'no');
     if (hrv === 'unknown') {
       if (hrvFound) {
         hrv = 'yes';
@@ -121,16 +127,26 @@ export async function syncGarmin(client: GarminClient, onProgress?: (p: GarminPr
       oldest = date;
       await kvSet(KV.oldestSynced, date);
     }
+    // Days before the watch was first worn come back empty, so stop walking further back once a long run is empty.
+    if (i >= days.length) {
+      emptyRun = hasData ? 0 : emptyRun + 1;
+      if (emptyRun >= EMPTY_DAYS_TO_STOP_BACKFILL) {
+        await kvSet(KV.backfillDone, date);
+        stoppedEarly = true;
+        break;
+      }
+    }
   }
 
   const vo2From = all.length ? all[all.length - 1] : end;
   await syncVo2Max(client, vo2From, end);
   onProgress?.({done: all.length, total: all.length, date: end});
-  return {days: all.length, backfillRemaining: cursor >= target ? daysBetween(target, cursor) + 1 : 0};
+  return {days: all.length, backfillRemaining: stoppedEarly || cursor < target ? 0 : daysBetween(target, cursor) + 1};
 }
 
 export async function resetGarminSyncState() {
   await kvSet(KV.oldestSynced, '');
   await kvSet(KV.displayName, '');
   await kvSet(KV.hrvSupport, '');
+  await kvSet(KV.backfillDone, '');
 }
