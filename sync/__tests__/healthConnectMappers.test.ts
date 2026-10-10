@@ -1,4 +1,4 @@
-import {dailyAverages, mapSleepSessions} from '@/sync/healthConnectMappers';
+import {dailyAverages, exerciseMinutesByDay, mapSleepSessions} from '@/sync/healthConnectMappers';
 
 const iso = (y: number, mo: number, d: number, h: number, mi = 0) => new Date(y, mo - 1, d, h, mi).toISOString();
 
@@ -37,5 +37,22 @@ describe('Health Connect mappers', () => {
       {date: '2026-10-10', metric: 'spo2_avg', source: 'health_connect', value: 97},
     ]);
     expect(dailyAverages(records, 'spo2_low', (r) => r.time, (r) => r.percentage, 'min')[0].value).toBe(94);
+  });
+});
+
+describe('exerciseMinutesByDay', () => {
+  it('merges overlapping sessions and skips auto-detected ones', () => {
+    expect(
+      exerciseMinutesByDay([
+        {startTime: iso(2026, 10, 9, 7), endTime: iso(2026, 10, 9, 8), metadata: {dataOrigin: 'com.garmin.android.apps.connectmobile', recordingMethod: 1}},
+        {startTime: iso(2026, 10, 9, 7, 30), endTime: iso(2026, 10, 9, 8, 15), metadata: {dataOrigin: 'com.sec.android.app.shealth', recordingMethod: 1}},
+        {startTime: iso(2026, 10, 9, 12), endTime: iso(2026, 10, 9, 12, 20), metadata: {recordingMethod: 0}},
+        {startTime: iso(2026, 10, 9, 14), endTime: iso(2026, 10, 9, 16), metadata: {recordingMethod: 2}},
+        {startTime: iso(2026, 10, 10, 18), endTime: iso(2026, 10, 10, 18, 30)},
+      ]),
+    ).toEqual([
+      {date: '2026-10-09', metric: 'exercise_min', source: 'health_connect', value: 95},
+      {date: '2026-10-10', metric: 'exercise_min', source: 'health_connect', value: 30},
+    ]);
   });
 });

@@ -14,7 +14,7 @@ export type SyncReport = {at: number; healthConnect: SourceOutcome; garmin: Sour
 
 export type SyncProgress = {source: 'health_connect' | 'garmin'; message: string; fraction?: number};
 
-const KV = {hcLastSync: 'hc.last_sync_date', lastReport: 'sync.last_report'};
+const KV = {hcLastSync: 'hc.last_sync_date', hcExerciseV2: 'hc.exercise_sessions_v2', lastReport: 'sync.last_report'};
 
 const HC_DAYS_WITHOUT_HISTORY = 29;
 const HC_DAYS_WITH_HISTORY = 365;
@@ -27,13 +27,15 @@ async function runHealthConnect(onProgress?: (p: SyncProgress) => void): Promise
   if (status !== 'ready') return {status: 'skipped', reason: status === 'needs_permission' ? 'Permissions not granted' : `Health Connect ${status.replace('_', ' ')}`};
   try {
     const end = today();
-    const last = await kvGet(KV.hcLastSync);
+    // v2 rebuilt exercise minutes from sessions; older rows came from an aggregate that counted every app's sessions.
+    const last = (await kvGet(KV.hcExerciseV2)) ? await kvGet(KV.hcLastSync) : null;
     const from = last
       ? addDays(last, -RESYNC_OVERLAP_DAYS)
       : addDays(end, -((await hasHistoryPermission()) ? HC_DAYS_WITH_HISTORY : HC_DAYS_WITHOUT_HISTORY));
     onProgress?.({source: 'health_connect', message: `Reading Health Connect since ${from}`});
     const {rows, errors} = await syncHealthConnect(from, addDays(end, 1));
     await kvSet(KV.hcLastSync, end);
+    await kvSet(KV.hcExerciseV2, '1');
     return {status: 'ok', detail: `${rows} daily values`, warnings: errors};
   } catch (e) {
     return {status: 'error', message: message(e)};

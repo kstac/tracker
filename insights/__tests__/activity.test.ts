@@ -41,6 +41,18 @@ describe('scoreActivity', () => {
     });
   });
 
+  it('uses Garmin intensity minutes over Health Connect exercise, falling back only on days Garmin is missing', () => {
+    const data = daily({
+      intensity_min: new Map([
+        [addDays(TODAY, -2), 10],
+        [addDays(TODAY, -1), 0],
+      ]),
+      exercise_min: fromValues(TODAY, [180, 180, 180, 180, 180, 180, 180]),
+    });
+    const volume = scoreActivity({date: TODAY, daily: data})!.contributors.find((c) => c.key === 'training_volume');
+    expect(volume).toEqual({key: 'training_volume', label: 'Training volume', score: 100, detail: '910 of 150 intensity minutes'});
+  });
+
   it('returns null without data', () => {
     expect(scoreActivity({date: TODAY, daily: {}})).toBeNull();
   });

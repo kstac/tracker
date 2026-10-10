@@ -4,7 +4,7 @@ import {getDb} from '@/db';
 import {convertLegacyTrackers, LegacyTracker} from '@/db/legacy';
 import {resolveDaily} from '@/db/resolve';
 import {IsoDate} from '@/lib/dates';
-import {DailyData, DailyRow, Sample, SampleMetric, SleepNight, Source, Tag, TagEntry} from '@/metrics/types';
+import {DailyData, DailyRow, MetricId, Sample, SampleMetric, SleepNight, Source, Tag, TagEntry} from '@/metrics/types';
 
 const BATCH = 200;
 
@@ -28,6 +28,11 @@ export async function upsertDaily(rows: DailyRow[]) {
       );
     });
   });
+}
+
+export async function deleteDaily(metric: MetricId, source: Source, from: IsoDate, toExclusive: IsoDate) {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM daily_metrics WHERE metric = ? AND source = ? AND date >= ? AND date < ?', metric, source, from, toExclusive);
 }
 
 export async function getDailyRows(from?: IsoDate): Promise<DailyRow[]> {

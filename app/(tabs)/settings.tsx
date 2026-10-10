@@ -11,12 +11,14 @@ import {
   getHealthConnectStatus,
   HealthConnectStatus,
   hasHistoryPermission,
+  listExerciseSessions,
   openHealthConnectSettings,
   requestHealthConnectPermissions,
 } from '@/sync/healthConnect';
 import {useAppData} from '@/providers/AppData';
 import {ThemePreference, useThemePreference} from '@/providers/ThemePreference';
 import {useAppTheme} from '@/theme';
+import {addDays, today} from '@/lib/dates';
 
 const HC_TEXT: Record<HealthConnectStatus, string> = {
   unavailable: 'Health Connect is not available on this phone',
@@ -54,7 +56,7 @@ function formatImportReport(r: LegacyImportReport | null) {
 export default function SettingsScreen() {
   const {chart} = useAppTheme();
   const {preference, setPreference} = useThemePreference();
-  const {sync, syncing, lastSync, reload} = useAppData();
+  const {sync, syncing, lastSync, reload, daily} = useAppData();
   const [hc, setHc] = useState<HealthConnectStatus | null>(null);
   const [hcHistory, setHcHistory] = useState(false);
   const [garmin, setGarmin] = useState<{connected: boolean; name: string | null; hrv: string | null}>({connected: false, name: null, hrv: null});
@@ -96,6 +98,30 @@ export default function SettingsScreen() {
         sync().then(refresh);
       }},
     ]);
+
+  const activityCheck = async () => {
+    const end = today();
+    const from = addDays(end, -6);
+    const methods = ['unknown', 'active', 'auto-detected', 'manual'];
+    const days = Array.from({length: 7}, (_, i) => addDays(from, i)).map((d) => {
+      const intensity = daily.intensity_min?.get(d);
+      const exercise = daily.exercise_min?.get(d);
+      const fmt = (v?: number) => (v == null ? '–' : `${Math.round(v)} min`);
+      return `${d}  Garmin intensity ${fmt(intensity)} · HC exercise ${fmt(exercise)}`;
+    });
+    let sessions: string[] = [];
+    try {
+      sessions = (await listExerciseSessions(from, addDays(end, 1))).map(
+        (x) => `${x.start.slice(0, 16).replace('T', ' ')}  ${x.minutes} min · type ${x.type} · ${methods[x.method ?? 0] ?? x.method} · ${x.origin}`,
+      );
+    } catch (e) {
+      sessions = [`Could not read sessions: ${e instanceof Error ? e.message : String(e)}`];
+    }
+    setDialog({
+      title: 'Activity data check',
+      body: ['Last 7 days (score uses Garmin, falls back to HC):', ...days, '', `Health Connect exercise sessions (${sessions.length}):`, ...sessions].join('\n'),
+    });
+  };
 
   const reimport = async () => {
     const report = await migrateLegacyTrackers(true);
@@ -188,6 +214,7 @@ export default function SettingsScreen() {
       <Panel>
         <PanelHeader title="Debug" icon="bug-outline" color={chart.inkMuted} />
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
+          <Button onPress={activityCheck}>Activity data check</Button>
           <Button onPress={reload}>Reload</Button>
           <Button onPress={async () => setDialog({title: 'Stored data', body: JSON.stringify(await dumpDatabase(), null, 2)})}>Show stored data</Button>
         </View>

@@ -20,7 +20,7 @@ export const EASY_DAY_MAX_MIN = 10;
 
 export type ActivityInput = {date: IsoDate; daily: DailyData; stepGoal?: number};
 
-/** Training minutes for each of the last 7 days that has data, preferring Garmin intensity minutes. */
+/** Training minutes for each of the last 7 days. Garmin intensity minutes win; Health Connect exercise only fills days Garmin has no value for. */
 function weeklyLoad(daily: DailyData, date: IsoDate): number[] | null {
   const days: number[] = [];
   let any = false;
@@ -29,7 +29,7 @@ function weeklyLoad(daily: DailyData, date: IsoDate): number[] | null {
     const intensity = daily.intensity_min?.get(d);
     const exercise = daily.exercise_min?.get(d);
     if (intensity != null || exercise != null) any = true;
-    days.push(Math.max(intensity ?? 0, exercise ?? 0));
+    days.push(intensity ?? exercise ?? 0);
   }
   return any ? days : null;
 }

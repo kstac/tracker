@@ -9,11 +9,11 @@ import {
   SdkAvailabilityStatus,
 } from 'react-native-health-connect';
 import type {AggregateResultRecordType, AggregationGroupResult, RecordType} from 'react-native-health-connect';
-import {upsertDaily, upsertSamples, upsertSleep} from '@/db/repo';
+import {deleteDaily, upsertDaily, upsertSamples, upsertSleep} from '@/db/repo';
 import {addDays, IsoDate, parseIsoDate, toIsoDate} from '@/lib/dates';
 import {DailyRow, MetricId} from '@/metrics/types';
 import {sleepDerivedRows} from '@/sync/sleep';
-import {dailyAverages, mapHeartRateRecords, mapSleepSessions} from '@/sync/healthConnectMappers';
+import {dailyAverages, exerciseMinutesByDay, mapHeartRateRecords, mapSleepSessions} from '@/sync/healthConnectMappers';
 
 const READ_TYPES: RecordType[] = [
   'Steps', 'Distance', 'ActiveCaloriesBurned', 'TotalCaloriesBurned', 'HeartRate', 'RestingHeartRate',
@@ -65,6 +65,21 @@ export async function requestHealthConnectPermissions(): Promise<HealthConnectSt
 }
 
 export {openHealthConnectSettings};
+
+export type ExerciseSessionInfo = {start: string; end: string; minutes: number; type: number; origin: string; method: number | null};
+
+export async function listExerciseSessions(from: IsoDate, toExclusive: IsoDate): Promise<ExerciseSessionInfo[]> {
+  if (!(await ensureInitialized())) return [];
+  const sessions = await readAll('ExerciseSession', from, toExclusive);
+  return sessions.map((s) => ({
+    start: s.startTime,
+    end: s.endTime,
+    minutes: Math.round((Date.parse(s.endTime) - Date.parse(s.startTime)) / 60_000),
+    type: s.exerciseType,
+    origin: s.metadata?.dataOrigin ?? 'unknown',
+    method: s.metadata?.recordingMethod ?? null,
+  }));
+}
 
 function range(from: IsoDate, toExclusive: IsoDate) {
   return {
@@ -131,8 +146,13 @@ export async function syncHealthConnect(from: IsoDate, toExclusive: IsoDate): Pr
   push(await settle('Floors', aggregateDaily('FloorsClimbed', from, toExclusive, (r) => [['floors', r.FLOORS_CLIMBED_TOTAL]]), errors));
   push(await settle('Heart rate', aggregateDaily('HeartRate', from, toExclusive, (r) => [['hr_avg', r.BPM_AVG], ['hr_min', r.BPM_MIN], ['hr_max', r.BPM_MAX]]), errors));
   push(await settle('Resting HR', aggregateDaily('RestingHeartRate', from, toExclusive, (r) => [['resting_hr', r.BPM_AVG]]), errors));
-  push(await settle('Exercise', aggregateDaily('ExerciseSession', from, toExclusive, (r) => [['exercise_min', r.EXERCISE_DURATION_TOTAL?.inSeconds / 60]]), errors));
   push(await settle('Weight', aggregateDaily('Weight', from, toExclusive, (r) => [['weight_kg', r.WEIGHT_AVG?.inKilograms]]), errors));
+
+  const exercise = await settle('Exercise', readAll('ExerciseSession', from, toExclusive), errors);
+  if (exercise) {
+    await deleteDaily('exercise_min', 'health_connect', from, toExclusive);
+    push(exerciseMinutesByDay(exercise));
+  }
 
   const spo2 = await settle('SpO2', readAll('OxygenSaturation', from, toExclusive), errors);
   if (spo2) {

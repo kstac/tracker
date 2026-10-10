@@ -68,3 +68,44 @@ export function mapHeartRateRecords(records: {samples: {time: string; beatsPerMi
     r.samples.map((s) => ({metric: 'heart_rate' as const, ts: Date.parse(s.time), value: s.beatsPerMinute, source: 'health_connect' as const})),
   );
 }
+
+export type HcExerciseSession = {
+  startTime: string;
+  endTime: string;
+  exerciseType?: number;
+  metadata?: {dataOrigin?: string; recordingMethod?: number};
+};
+
+const AUTOMATICALLY_RECORDED = 2;
+
+/**
+ * Minutes of deliberate exercise per local day. Auto-detected sessions (e.g. Move IQ walks) are skipped, and
+ * overlapping sessions from different apps are merged so the same workout isn't counted twice.
+ */
+export function exerciseMinutesByDay(sessions: HcExerciseSession[]): DailyRow[] {
+  const byDate = new Map<IsoDate, [number, number][]>();
+  for (const s of sessions) {
+    if (s.metadata?.recordingMethod === AUTOMATICALLY_RECORDED) continue;
+    const start = Date.parse(s.startTime);
+    const end = Date.parse(s.endTime);
+    if (!(end > start)) continue;
+    const date = toIsoDate(new Date(start));
+    (byDate.get(date) ?? byDate.set(date, []).get(date)!).push([start, end]);
+  }
+  const rows: DailyRow[] = [];
+  for (const [date, intervals] of byDate) {
+    intervals.sort((a, b) => a[0] - b[0]);
+    let total = 0;
+    let [curStart, curEnd] = intervals[0];
+    for (const [s, e] of intervals.slice(1)) {
+      if (s <= curEnd) curEnd = Math.max(curEnd, e);
+      else {
+        total += curEnd - curStart;
+        [curStart, curEnd] = [s, e];
+      }
+    }
+    total += curEnd - curStart;
+    rows.push({date, metric: 'exercise_min', source: 'health_connect', value: total / 60_000});
+  }
+  return rows.sort((a, b) => a.date.localeCompare(b.date));
+}
