@@ -74,6 +74,8 @@ export function mapSleep(date: IsoDate, data: Json | null | undefined): MappedSl
     ['sleep_stress', positive(dto.avgSleepStress)],
     ['respiration_sleep', positive(dto.averageRespirationValue)],
     ['hrv_overnight', positive(data?.avgOvernightHrv)],
+    ['garmin_sleep_need', positive(dto.sleepNeed?.actual)],
+    ['nap_min', num(dto.napTimeSeconds) == null ? null : dto.napTimeSeconds / 60],
   ]);
   return {night, rows};
 }

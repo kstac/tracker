@@ -62,11 +62,16 @@ describe('Garmin mappers', () => {
           averageRespirationValue: 13.2,
           avgSleepStress: 17,
           sleepScores: {overall: {value: 81}},
+          sleepNeed: {baseline: 480, actual: 500, feedback: 'INCREASED'},
+          napTimeSeconds: 1200,
         },
       }),
     ).toEqual({
       night: {date: '2026-10-09', source: 'garmin', startTs: start, endTs: end, deepMin: 90, lightMin: 240, remMin: 100, awakeMin: 50},
-      rows: [g('2026-10-09', 'garmin_sleep_score', 81), g('2026-10-09', 'sleep_stress', 17), g('2026-10-09', 'respiration_sleep', 13.2)],
+      rows: [
+        g('2026-10-09', 'garmin_sleep_score', 81), g('2026-10-09', 'sleep_stress', 17), g('2026-10-09', 'respiration_sleep', 13.2),
+        g('2026-10-09', 'garmin_sleep_need', 500), g('2026-10-09', 'nap_min', 20),
+      ],
     });
     expect(mapSleep('2026-10-09', {dailySleepDTO: {}})).toEqual({night: null, rows: []});
   });

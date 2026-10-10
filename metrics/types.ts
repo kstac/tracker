@@ -33,6 +33,8 @@ export type MetricId =
   | 'sleep_end'
   | 'sleep_midpoint'
   | 'garmin_sleep_score'
+  | 'garmin_sleep_need'
+  | 'nap_min'
   | 'sleep_score'
   | 'respiration_avg'
   | 'respiration_sleep'

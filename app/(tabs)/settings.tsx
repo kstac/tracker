@@ -7,6 +7,7 @@ import {backupSummary, exportBackup, pickBackup, restoreBackup} from '@/db/backu
 import {DEFAULT_PREFS, getPrefs, NotificationPrefs, permissionGranted, requestPermission, setPrefs} from '@/lib/notifications';
 import {dumpDatabase, getLegacyImportReport, kvGet, LegacyImportReport, migrateLegacyTrackers} from '@/db/repo';
 import {clearTokens, loadTokens} from '@/garmin/auth';
+import {sleepNeedReport} from '@/garmin/diagnostics';
 import {resetHealthConnectSyncState, SourceOutcome} from '@/sync';
 import {resetGarminSyncState} from '@/sync/garmin';
 import {
@@ -338,6 +339,18 @@ export default function SettingsScreen() {
         <PanelHeader title="Debug" icon="bug-outline" color={chart.inkMuted} />
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
           <Button onPress={activityCheck}>Activity data check</Button>
+          <Button
+            onPress={async () => {
+              setDialog({title: 'Garmin sleep need', body: 'Fetching the last 7 nights from Garmin…'});
+              try {
+                setDialog({title: 'Garmin sleep need', body: await sleepNeedReport()});
+              } catch (e) {
+                setDialog({title: 'Garmin sleep need', body: `Failed: ${e instanceof Error ? e.message : String(e)}`});
+              }
+            }}
+          >
+            Garmin sleep need check
+          </Button>
           <Button onPress={reload}>Reload</Button>
           <Button onPress={async () => setDialog({title: 'Stored data', body: JSON.stringify(await dumpDatabase(), null, 2)})}>Show stored data</Button>
         </View>
