@@ -52,6 +52,13 @@
       ],
       "expo-sqlite",
       "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#2563c9"
+        }
+      ],
+      "expo-background-task",
       "react-native-health-connect",
       [
         "expo-build-properties",
