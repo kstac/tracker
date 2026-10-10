@@ -36,5 +36,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npx jest --ci
+
       - name: Publish update
         run: eas update --auto --environment ${{ github.ref_name }} --platform android --non-interactive
