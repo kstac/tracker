@@ -1,0 +1,136 @@
+import {kvGet, kvSet, upsertDaily, upsertSamples, upsertSleep} from '@/db/repo';
+import {GarminClient} from '@/garmin/client';
+import {
+  averageHeartRate,
+  bodyBatteryAt,
+  mapHeartRateSamples,
+  mapHrv,
+  mapMaxMetrics,
+  mapSleep,
+  mapStressSamples,
+  mapUserSummary,
+} from '@/garmin/mappers';
+import {addDays, daysBetween, IsoDate, today} from '@/lib/dates';
+import {DailyRow} from '@/metrics/types';
+import {sleepDerivedRows} from '@/sync/sleep';
+
+const KV = {
+  displayName: 'garmin.display_name',
+  oldestSynced: 'garmin.oldest_synced',
+  hrvSupport: 'garmin.hrv_support',
+};
+
+const BACKFILL_DAYS = 365;
+const BACKFILL_DAYS_PER_RUN = 45;
+const RECENT_DAYS = 3;
+const SAMPLE_DAYS = 14;
+const HRV_PROBE_DAYS = 5;
+
+export type GarminProgress = {done: number; total: number; date: IsoDate};
+
+async function displayName(client: GarminClient): Promise<string> {
+  const cached = await kvGet(KV.displayName);
+  if (cached) return cached;
+  const name = await client.displayName();
+  await kvSet(KV.displayName, name);
+  return name;
+}
+
+async function syncDay(client: GarminClient, name: string, date: IsoDate, withSamples: boolean, probeHrv: boolean) {
+  const rows: DailyRow[] = [];
+  rows.push(...mapUserSummary(date, await client.get(`/usersummary-service/usersummary/daily/${name}`, {calendarDate: date})));
+
+  const sleep = mapSleep(date, await client.get(`/wellness-service/wellness/dailySleepData/${name}`, {date, nonSleepBufferMinutes: 60}));
+  rows.push(...sleep.rows);
+  if (sleep.night) {
+    await upsertSleep([sleep.night]);
+    rows.push(...sleepDerivedRows(sleep.night));
+  }
+
+  let hrvFound = false;
+  if (probeHrv) {
+    const hrv = mapHrv(date, await client.get(`/hrv-service/hrv/${date}`));
+    hrvFound = hrv.length > 0;
+    rows.push(...hrv);
+  }
+
+  if (withSamples) {
+    const stress = mapStressSamples(await client.get(`/wellness-service/wellness/dailyStress/${date}`));
+    const hr = mapHeartRateSamples(await client.get(`/wellness-service/wellness/dailyHeartRate/${name}`, {date}));
+    await upsertSamples([...stress, ...hr]);
+    const avg = averageHeartRate(hr);
+    if (avg != null) rows.push({date, metric: 'hr_avg', source: 'garmin', value: avg});
+    if (sleep.night && !rows.some((r) => r.metric === 'body_battery_wake')) {
+      const wake = bodyBatteryAt(stress, sleep.night.endTs);
+      if (wake != null) rows.push({date, metric: 'body_battery_wake', source: 'garmin', value: wake});
+    }
+  }
+
+  await upsertDaily(rows);
+  return {hrvFound};
+}
+
+async function syncVo2Max(client: GarminClient, from: IsoDate, to: IsoDate) {
+  await upsertDaily(mapMaxMetrics(await client.get(`/metrics-service/metrics/maxmet/daily/${from}/${to}`)));
+}
+
+/** HRV support is unknown until probed; the vivomove Trend likely has none, so stop asking after a few empty days. */
+async function hrvMode(): Promise<'unknown' | 'yes' | 'no'> {
+  const v = await kvGet(KV.hrvSupport);
+  return v === 'yes' || v === 'no' ? v : 'unknown';
+}
+
+export async function syncGarmin(client: GarminClient, onProgress?: (p: GarminProgress) => void) {
+  const name = await displayName(client);
+  const end = today();
+  const oldestSynced = await kvGet(KV.oldestSynced);
+  const target = addDays(end, -BACKFILL_DAYS);
+
+  const days: IsoDate[] = [];
+  for (let i = 0; i < RECENT_DAYS; i++) days.push(addDays(end, -i));
+  let cursor = oldestSynced ? addDays(oldestSynced, -1) : addDays(end, -RECENT_DAYS);
+  if (!oldestSynced) {
+    for (let i = RECENT_DAYS; i < SAMPLE_DAYS; i++) days.push(addDays(end, -i));
+    cursor = addDays(end, -SAMPLE_DAYS);
+  }
+  const backfill: IsoDate[] = [];
+  while (cursor >= target && backfill.length < BACKFILL_DAYS_PER_RUN) {
+    backfill.push(cursor);
+    cursor = addDays(cursor, -1);
+  }
+  const all = [...days, ...backfill];
+
+  let hrv = await hrvMode();
+  let hrvEmpty = 0;
+  let oldest = oldestSynced || null;
+  for (const [i, date] of all.entries()) {
+    onProgress?.({done: i, total: all.length, date});
+    const withSamples = date > addDays(end, -SAMPLE_DAYS);
+    const {hrvFound} = await syncDay(client, name, date, withSamples, hrv !== 'no');
+    if (hrv === 'unknown') {
+      if (hrvFound) {
+        hrv = 'yes';
+        await kvSet(KV.hrvSupport, 'yes');
+      } else if (++hrvEmpty >= HRV_PROBE_DAYS) {
+        hrv = 'no';
+        await kvSet(KV.hrvSupport, 'no');
+      }
+    }
+    const extendsContiguousRange = !oldestSynced || i >= days.length;
+    if (extendsContiguousRange && (!oldest || date < oldest)) {
+      oldest = date;
+      await kvSet(KV.oldestSynced, date);
+    }
+  }
+
+  const vo2From = all.length ? all[all.length - 1] : end;
+  await syncVo2Max(client, vo2From, end);
+  onProgress?.({done: all.length, total: all.length, date: end});
+  return {days: all.length, backfillRemaining: cursor >= target ? daysBetween(target, cursor) + 1 : 0};
+}
+
+export async function resetGarminSyncState() {
+  await kvSet(KV.oldestSynced, '');
+  await kvSet(KV.displayName, '');
+  await kvSet(KV.hrvSupport, '');
+}
