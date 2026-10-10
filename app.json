@@ -1,17 +1,12 @@
 {
   "expo": {
-    "name": "tracker",
+    "name": "Health Tracker",
     "slug": "tracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "tracker",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/images/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.tracker"
@@ -21,7 +16,24 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.anonymous.tracker"
+      "package": "com.anonymous.tracker",
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_TOTAL_CALORIES_BURNED",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_RESTING_HEART_RATE",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_FLOORS_CLIMBED",
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_OXYGEN_SATURATION",
+        "android.permission.health.READ_RESPIRATORY_RATE",
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.READ_VO2_MAX",
+        "android.permission.health.READ_HEALTH_DATA_HISTORY",
+        "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -29,7 +41,28 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-sqlite",
+      "expo-secure-store",
+      "react-native-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 26
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -43,7 +76,7 @@
       }
     },
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "fingerprint"
     },
     "updates": {
       "url": "https://u.expo.dev/cabe577a-afeb-4c25-b255-318cb97a156a"
