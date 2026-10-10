@@ -1,3 +1,4 @@
+import {Platform} from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
 export const DI_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token';
@@ -162,6 +163,7 @@ export async function saveTokens(tokens: GarminTokens) {
 }
 
 export async function loadTokens(): Promise<GarminTokens | null> {
+  if (Platform.OS === 'web') return null;
   const [accessToken, refreshToken, meta] = await Promise.all([
     SecureStore.getItemAsync(KEYS.access),
     SecureStore.getItemAsync(KEYS.refresh),
@@ -173,5 +175,6 @@ export async function loadTokens(): Promise<GarminTokens | null> {
 }
 
 export async function clearTokens() {
+  if (Platform.OS === 'web') return;
   await Promise.all(Object.values(KEYS).map((k) => SecureStore.deleteItemAsync(k)));
 }

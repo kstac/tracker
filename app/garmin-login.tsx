@@ -1,5 +1,5 @@
 import {useRef, useState} from 'react';
-import {View} from 'react-native';
+import {Platform, View} from 'react-native';
 import {router} from 'expo-router';
 import {WebView, WebViewMessageEvent, WebViewNavigation} from 'react-native-webview';
 import {ActivityIndicator, Button, Menu, Text} from 'react-native-paper';
@@ -66,6 +66,14 @@ export default function GarminLoginScreen() {
     handled.current = false;
     setFlow(f);
   };
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{flex: 1, backgroundColor: chart.page, padding: 16}}>
+        <Text style={{color: chart.inkSecondary}}>Garmin sign-in only works in the phone app.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{flex: 1, backgroundColor: chart.page}}>
