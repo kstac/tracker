@@ -5,6 +5,8 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Button, Chip, Text} from 'react-native-paper';
 import InsightCard from '@/components/InsightCard';
+import TagAmountDialog from '@/components/tags/TagAmountDialog';
+import {formatTagAmount} from '@/insights/tagStats';
 import ScoreDetails from '@/components/ScoreDetails';
 import ScoreRing from '@/components/ScoreRing';
 import StatTile from '@/components/StatTile';
@@ -14,7 +16,7 @@ import {Score} from '@/insights';
 import {formatClock, formatMinutes, minutesFromMidnight, parseIsoDate, today} from '@/lib/dates';
 import {formatMetricValue} from '@/lib/format';
 import {METRIC_BY_ID} from '@/metrics/registry';
-import {MetricId, SleepNight} from '@/metrics/types';
+import {MetricId, SleepNight, Tag} from '@/metrics/types';
 import {useAppData} from '@/providers/AppData';
 import {useAppTheme} from '@/theme';
 
@@ -67,6 +69,7 @@ export default function TodayScreen() {
   const {report, daily, sleep, tags, tagEntries, syncing, sync, setTagValue, loading} = useAppData();
   const [openScore, setOpenScore] = useState<ScoreKey | null>(null);
   const [showAllInsights, setShowAllInsights] = useState(false);
+  const [amountTag, setAmountTag] = useState<Tag | null>(null);
   const date = today();
 
   const value = (metric: MetricId) => daily[metric]?.get(date) ?? null;
@@ -132,7 +135,7 @@ export default function TodayScreen() {
         <Text variant="labelSmall" style={{color: chart.inkMuted, textAlign: 'center', marginBottom: 4}}>Tap a score to see what&apos;s driving it</Text>
       </LinearGradient>
 
-      {open && openScore && <ScoreDetails title={SCORE_META[openScore].title} icon={SCORE_META[openScore].icon} score={open} />}
+      {open && openScore && <ScoreDetails kind={openScore} title={SCORE_META[openScore].title} icon={SCORE_META[openScore].icon} score={open} />}
 
       {!loading && !hasAnyData && (
         <Panel>
@@ -189,6 +192,13 @@ export default function TodayScreen() {
             <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
               {tags.map((t) => {
                 const count = tagEntries.find((e) => e.tagId === t.id && e.date === date)?.value ?? 0;
+                if (t.unit) {
+                  return (
+                    <Chip key={t.id} selected={count > 0} showSelectedOverlay icon={count > 0 ? 'check' : 'scale-balance'} onPress={() => setAmountTag(t)}>
+                      {count > 0 ? `${t.name} · ${formatTagAmount(count, t.unit)}` : t.name}
+                    </Chip>
+                  );
+                }
                 return (
                   <Chip
                     key={t.id}
@@ -203,8 +213,19 @@ export default function TodayScreen() {
                 );
               })}
             </View>
-            <Text variant="labelSmall" style={{color: chart.inkMuted, marginTop: 10}}>Tap to add one, long-press to remove one</Text>
+            <Text variant="labelSmall" style={{color: chart.inkMuted, marginTop: 10}}>Tap to add one, long-press to remove one. Amount tags open an input.</Text>
           </Panel>
+          <TagAmountDialog
+            tag={amountTag}
+            date={date}
+            current={amountTag ? tagEntries.find((e) => e.tagId === amountTag.id && e.date === date)?.value ?? 0 : 0}
+            onDismiss={() => setAmountTag(null)}
+            onSubmit={async (v) => {
+              const t = amountTag;
+              setAmountTag(null);
+              if (t) await setTagValue(t.id, date, v);
+            }}
+          />
         </>
       )}
     </ScrollView>

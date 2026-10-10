@@ -52,3 +52,5 @@ export function computeInsights(input: InsightInput): InsightReport {
     tagEffects: computeTagEffects({today, daily, sleepScores, tags: input.tags, tagEntries: input.tagEntries}),
   };
 }
+export * from '@/insights/history';
+export * from '@/insights/weekly';

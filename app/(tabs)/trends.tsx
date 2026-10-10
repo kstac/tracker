@@ -1,7 +1,13 @@
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import {RefreshControl, ScrollView} from 'react-native';
 import {Chip, Text} from 'react-native-paper';
 import MetricCard from '@/components/MetricCard';
+import ScoreCard from '@/components/scores/ScoreCard';
+import WeeklySummaryPanel from '@/components/scores/WeeklySummaryPanel';
+import {SCORE_KINDS} from '@/components/scores/defs';
+import {useScoreHistory} from '@/components/scores/useScoreHistory';
+import {computeWeeklySummary} from '@/insights';
+import {today} from '@/lib/dates';
 import SleepStagesChart from '@/components/charts/SleepStagesChart';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
 import {CATEGORY_ICONS, CATEGORY_LABELS, METRICS, MetricCategory} from '@/metrics/registry';
@@ -10,10 +16,17 @@ import {useAppTheme} from '@/theme';
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as MetricCategory[];
 
+type TrendsView = 'scores' | MetricCategory;
+
 export default function TrendsScreen() {
-  const {chart} = useAppTheme();
-  const {daily, sleep, syncing, sync} = useAppData();
-  const [category, setCategory] = useState<MetricCategory>('sleep');
+  const {chart, colors} = useAppTheme();
+  const {daily, sleep, tags, tagEntries, syncing, sync} = useAppData();
+  const [category, setCategory] = useState<TrendsView>('scores');
+  const history = useScoreHistory();
+  const weekly = useMemo(
+    () => (category === 'scores' ? computeWeeklySummary({today: today(), daily, sleep, tags, tagEntries}, today()) : null),
+    [category, daily, sleep, tags, tagEntries],
+  );
 
   const metrics = METRICS.filter((m) => m.category === category && (daily[m.id]?.size ?? 0) > 0);
 
@@ -30,6 +43,15 @@ export default function TrendsScreen() {
         style={{backgroundColor: chart.page}}
         contentContainerStyle={{gap: 8, paddingHorizontal: 16, paddingVertical: 12}}
       >
+        <Chip
+          icon="star-four-points-outline"
+          selected={category === 'scores'}
+          showSelectedOverlay
+          onPress={() => setCategory('scores')}
+          style={category === 'scores' ? {backgroundColor: `${colors.primary}26`} : undefined}
+        >
+          Scores
+        </Chip>
         {CATEGORIES.map((c) => (
           <Chip
             key={c}
@@ -51,7 +73,12 @@ export default function TrendsScreen() {
         </Panel>
       )}
 
-      {metrics.length === 0 ? (
+      {category === 'scores' ? (
+        <>
+          {weekly && <WeeklySummaryPanel summary={weekly} />}
+          {SCORE_KINDS.map((k) => <ScoreCard key={k} kind={k} days={history.days} />)}
+        </>
+      ) : metrics.length === 0 ? (
         <Panel>
           <Text style={{color: chart.inkMuted}}>No {CATEGORY_LABELS[category].toLowerCase()} data yet.</Text>
         </Panel>

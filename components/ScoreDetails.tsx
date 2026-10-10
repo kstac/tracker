@@ -1,8 +1,9 @@
 import {View} from 'react-native';
-import {Text} from 'react-native-paper';
+import {router} from 'expo-router';
+import {Button, Text} from 'react-native-paper';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
 import {scoreColor} from '@/components/ScoreRing';
-import {Score, ScoreLabel} from '@/insights';
+import {Contributor, Score, ScoreKind, ScoreLabel} from '@/insights';
 import {useAppTheme} from '@/theme';
 
 function contributorLabel(score: number): ScoreLabel {
@@ -12,7 +13,33 @@ function contributorLabel(score: number): ScoreLabel {
   return 'Pay attention';
 }
 
-export default function ScoreDetails({title, score, icon}: {title: string; score: Score; icon: string}) {
+export function ContributorList({contributors}: {contributors: Contributor[]}) {
+  const {chart} = useAppTheme();
+  return (
+    <View style={{gap: 14}}>
+      {[...contributors].sort((a, b) => a.score - b.score).map((c) => {
+        const label = contributorLabel(c.score);
+        const color = scoreColor(label, chart.status);
+        return (
+          <View key={c.key}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+              <Text variant="bodyMedium" style={{color: chart.inkPrimary, fontWeight: '500'}}>{c.label}</Text>
+              <Text variant="labelMedium" style={{color: chart.inkSecondary}}>{label}</Text>
+            </View>
+            <View style={{height: 6, borderRadius: 3, backgroundColor: chart.grid, marginVertical: 6, overflow: 'hidden'}}>
+              <View style={{width: `${Math.max(3, Math.min(100, c.score))}%`, height: '100%', borderRadius: 3, backgroundColor: color}} />
+            </View>
+            <Text variant="bodySmall" style={{color: chart.inkSecondary}}>{c.detail}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+type Props = {title: string; score: Score; icon: string; kind?: ScoreKind};
+
+export default function ScoreDetails({title, score, icon, kind}: Props) {
   const {chart} = useAppTheme();
   return (
     <Panel>
@@ -22,24 +49,17 @@ export default function ScoreDetails({title, score, icon}: {title: string; score
         icon={icon}
         color={scoreColor(score.label, chart.status)}
       />
-      <View style={{gap: 14}}>
-        {[...score.contributors].sort((a, b) => a.score - b.score).map((c) => {
-          const label = contributorLabel(c.score);
-          const color = scoreColor(label, chart.status);
-          return (
-            <View key={c.key}>
-              <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-                <Text variant="bodyMedium" style={{color: chart.inkPrimary, fontWeight: '500'}}>{c.label}</Text>
-                <Text variant="labelMedium" style={{color: chart.inkSecondary}}>{label}</Text>
-              </View>
-              <View style={{height: 6, borderRadius: 3, backgroundColor: chart.grid, marginVertical: 6, overflow: 'hidden'}}>
-                <View style={{width: `${Math.max(3, Math.min(100, c.score))}%`, height: '100%', borderRadius: 3, backgroundColor: color}} />
-              </View>
-              <Text variant="bodySmall" style={{color: chart.inkSecondary}}>{c.detail}</Text>
-            </View>
-          );
-        })}
-      </View>
+      <ContributorList contributors={score.contributors} />
+      {kind && (
+        <Button
+          mode="text"
+          icon="chart-line"
+          style={{alignSelf: 'flex-start', marginTop: 8}}
+          onPress={() => router.push({pathname: '/scores/[kind]', params: {kind}})}
+        >
+          See history
+        </Button>
+      )}
     </Panel>
   );
 }
