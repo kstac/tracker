@@ -12,7 +12,8 @@ import ScoreRing from '@/components/ScoreRing';
 import StatTile from '@/components/StatTile';
 import SyncStatus from '@/components/SyncStatus';
 import {Panel, PanelHeader, SectionHeader} from '@/components/ui/Panel';
-import {Score} from '@/insights';
+import {computeBedtimeShift, computeSleepDebt, Score} from '@/insights';
+import SleepDebtPanel, {shiftText} from '@/components/SleepDebtPanel';
 import {formatClock, formatMinutes, minutesFromMidnight, parseIsoDate, today} from '@/lib/dates';
 import {formatMetricValue} from '@/lib/format';
 import {METRIC_BY_ID} from '@/metrics/registry';
@@ -84,6 +85,8 @@ export default function TodayScreen() {
     activity: report?.activity ?? null,
   };
   const open = openScore ? scores[openScore] : null;
+  const sleepDebt = computeSleepDebt(sleep, date);
+  const bedtime = computeBedtimeShift(daily, date);
   const toggle = (key: ScoreKey) => scores[key] && setOpenScore(openScore === key ? null : key);
 
   const tile = (metric: MetricId, label?: string) => {
@@ -148,7 +151,8 @@ export default function TodayScreen() {
         <Panel onPress={() => router.push({pathname: '/metric/[id]', params: {id: 'sleep_total_min'}})}>
           <PanelHeader
             title={lastNight.date === date ? 'Last night' : `Sleep · ${parseIsoDate(lastNight.date).toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'})}`}
-            subtitle={`${formatClock(minutesFromMidnight(lastNight.startTs, lastNight.date))} → ${formatClock(minutesFromMidnight(lastNight.endTs, lastNight.date))}`}
+            subtitle={`${formatClock(minutesFromMidnight(lastNight.startTs, lastNight.date))} → ${formatClock(minutesFromMidnight(lastNight.endTs, lastNight.date))}` +
+              (bedtime && lastNight.date >= date ? ` · bed ${shiftText(bedtime.lastDelta)}` : '')}
             icon="weather-night"
             color={chart.category.sleep}
             right={
@@ -160,6 +164,8 @@ export default function TodayScreen() {
           <StageBar night={lastNight} />
         </Panel>
       )}
+
+      {sleepDebt && <SleepDebtPanel debt={sleepDebt} bedtime={bedtime} />}
 
       <SectionHeader title="Today" />
       <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, marginBottom: 8}}>

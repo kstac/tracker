@@ -54,3 +54,4 @@ export function computeInsights(input: InsightInput): InsightReport {
 }
 export * from '@/insights/history';
 export * from '@/insights/weekly';
+export * from '@/insights/sleepDebt';
