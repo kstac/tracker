@@ -62,6 +62,9 @@ export type SampleMetric = 'heart_rate' | 'stress' | 'body_battery';
 
 export type Sample = {metric: SampleMetric; ts: number; value: number; source: Source};
 
-export type Tag = {id: string; name: string; createdAt: number};
+/** `unit` null means a simple count (+1 per tap); otherwise entries are amounts in that unit, e.g. mg. */
+export type Tag = {id: string; name: string; createdAt: number; unit: string | null; weeklyLimit: number | null};
+
+export type TagUpdate = {name: string; unit: string | null; weeklyLimit: number | null};
 
 export type TagEntry = {tagId: string; date: IsoDate; value: number};

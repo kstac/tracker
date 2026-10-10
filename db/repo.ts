@@ -4,7 +4,7 @@ import {getDb} from '@/db';
 import {convertLegacyTrackers, LegacyTracker} from '@/db/legacy';
 import {resolveDaily} from '@/db/resolve';
 import {IsoDate} from '@/lib/dates';
-import {DailyData, DailyRow, MetricId, Sample, SampleMetric, SleepNight, Source, Tag, TagEntry} from '@/metrics/types';
+import {DailyData, DailyRow, MetricId, Sample, SampleMetric, SleepNight, Source, Tag, TagEntry, TagUpdate} from '@/metrics/types';
 
 const BATCH = 200;
 
@@ -121,22 +121,28 @@ export async function getSleepNights(from?: IsoDate): Promise<SleepNight[]> {
 
 export async function listTags(): Promise<Tag[]> {
   const db = await getDb();
-  const rows = await db.getAllAsync<{id: string; name: string; created_at: number}>(
-    'SELECT id, name, created_at FROM tags WHERE archived = 0 ORDER BY created_at',
+  const rows = await db.getAllAsync<{id: string; name: string; created_at: number; unit: string | null; weekly_limit: number | null}>(
+    'SELECT id, name, created_at, unit, weekly_limit FROM tags WHERE archived = 0 ORDER BY created_at',
   );
-  return rows.map((r) => ({id: r.id, name: r.name, createdAt: r.created_at}));
+  return rows.map((r) => ({id: r.id, name: r.name, createdAt: r.created_at, unit: r.unit, weeklyLimit: r.weekly_limit}));
 }
 
-export async function createTag(name: string): Promise<Tag> {
+export async function createTag(update: TagUpdate): Promise<Tag> {
   const db = await getDb();
-  const tag: Tag = {id: randomUUID(), name: name.trim(), createdAt: Date.now()};
-  await db.runAsync('INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)', tag.id, tag.name, tag.createdAt);
+  const tag: Tag = {id: randomUUID(), createdAt: Date.now(), ...update, name: update.name.trim()};
+  await db.runAsync(
+    'INSERT INTO tags (id, name, created_at, unit, weekly_limit) VALUES (?, ?, ?, ?, ?)',
+    tag.id, tag.name, tag.createdAt, tag.unit, tag.weeklyLimit,
+  );
   return tag;
 }
 
-export async function renameTag(id: string, name: string) {
+export async function updateTag(id: string, update: TagUpdate) {
   const db = await getDb();
-  await db.runAsync('UPDATE tags SET name = ? WHERE id = ?', name.trim(), id);
+  await db.runAsync(
+    'UPDATE tags SET name = ?, unit = ?, weekly_limit = ? WHERE id = ?',
+    update.name.trim(), update.unit, update.weeklyLimit, id,
+  );
 }
 
 export async function deleteTag(id: string) {

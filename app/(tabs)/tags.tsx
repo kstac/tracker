@@ -2,18 +2,21 @@ import {useState} from 'react';
 import {Pressable, ScrollView, View} from 'react-native';
 import {router} from 'expo-router';
 import {FAB, IconButton, Text} from 'react-native-paper';
-import TagNameDialog from '@/components/TagNameDialog';
+import TagEditDialog from '@/components/TagEditDialog';
+import LimitBar, {limitColor} from '@/components/tags/LimitBar';
+import TagAmountDialog from '@/components/tags/TagAmountDialog';
 import IconBadge from '@/components/ui/IconBadge';
 import {Panel} from '@/components/ui/Panel';
-import {addDays, daysBetween, IsoDate, parseIsoDate, today} from '@/lib/dates';
+import {computeTagStats, formatTagAmount} from '@/insights/tagStats';
+import {addDays, IsoDate, parseIsoDate, today} from '@/lib/dates';
+import {Tag} from '@/metrics/types';
 import {useAppData} from '@/providers/AppData';
 import {useAppTheme} from '@/theme';
 
-function daysSinceText(lastDate: IsoDate | undefined, date: IsoDate) {
-  if (!lastDate) return 'Never logged';
-  const days = daysBetween(lastDate, date);
-  if (days <= 0) return 'Logged this day';
-  return days === 1 ? '1 day since last' : `${days} days since last`;
+function sinceText(daysSince: number | null) {
+  if (daysSince == null) return 'Never logged';
+  if (daysSince <= 0) return 'Logged this day';
+  return daysSince === 1 ? '1 day without' : `${daysSince} days without`;
 }
 
 export default function TagsScreen() {
@@ -21,7 +24,9 @@ export default function TagsScreen() {
   const {tags, tagEntries, setTagValue, createTag} = useAppData();
   const [date, setDate] = useState<IsoDate>(today());
   const [adding, setAdding] = useState(false);
+  const [amountTag, setAmountTag] = useState<Tag | null>(null);
   const isToday = date === today();
+  const valueFor = (tagId: string) => tagEntries.find((e) => e.tagId === tagId && e.date === date)?.value ?? 0;
 
   return (
     <View style={{flex: 1, backgroundColor: chart.page}}>
@@ -43,32 +48,67 @@ export default function TagsScreen() {
           </Panel>
         )}
         {tags.map((t, i) => {
-          const entries = tagEntries.filter((e) => e.tagId === t.id && e.value > 0);
-          const count = entries.find((e) => e.date === date)?.value ?? 0;
-          const last = entries.filter((e) => e.date <= date).map((e) => e.date).sort().pop();
+          const entries = tagEntries.filter((e) => e.tagId === t.id);
+          const stats = computeTagStats(entries, date, t.weeklyLimit);
+          const value = valueFor(t.id);
           const color = chart.series[i % chart.series.length];
+          const fraction = stats.thisWeek.fraction;
+          const weekText = t.weeklyLimit != null
+            ? `${formatTagAmount(stats.thisWeek.total, null)} / ${formatTagAmount(t.weeklyLimit, t.unit)} this week`
+            : `${formatTagAmount(stats.thisWeek.total, t.unit)} this week`;
           return (
-            <Panel key={t.id} onPress={() => router.push({pathname: '/tag/[id]', params: {id: t.id}})} style={{flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10}}>
-              <IconBadge icon="tag-outline" color={color} />
-              <View style={{flex: 1}}>
-                <Text variant="titleMedium" style={{color: chart.inkPrimary, fontWeight: '600'}}>{t.name}</Text>
-                <Text variant="bodySmall" style={{color: chart.inkSecondary}}>{daysSinceText(last, date)}</Text>
+            <Panel key={t.id} onPress={() => router.push({pathname: '/tag/[id]', params: {id: t.id}})} style={{gap: 10, paddingVertical: 12}}>
+              <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
+                <IconBadge icon={t.unit ? 'scale-balance' : 'tag-outline'} color={color} />
+                <View style={{flex: 1}}>
+                  <Text variant="titleMedium" style={{color: chart.inkPrimary, fontWeight: '600'}}>{t.name}</Text>
+                  <Text variant="bodySmall" style={{color: chart.inkSecondary}}>{sinceText(stats.daysSinceLast)}</Text>
+                </View>
+                {t.unit ? (
+                  <Pressable onPress={() => setAmountTag(t)} accessibilityLabel={`Set ${t.name} amount`}
+                    style={{flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, borderWidth: 1, borderColor: colors.outlineVariant, paddingLeft: 14, paddingRight: 6, paddingVertical: 2}}>
+                    <Text variant="titleMedium" style={{color: value ? chart.inkPrimary : chart.inkMuted, fontWeight: '700'}}>{formatTagAmount(value, t.unit)}</Text>
+                    <IconButton icon="pencil-outline" size={16} style={{margin: 0}} />
+                  </Pressable>
+                ) : (
+                  <>
+                    <IconButton icon="minus" size={18} mode="outlined" disabled={value === 0} onPress={() => setTagValue(t.id, date, value - 1)} accessibilityLabel={`Remove one ${t.name}`} />
+                    <Text variant="titleLarge" style={{minWidth: 28, textAlign: 'center', color: value ? chart.inkPrimary : chart.inkMuted, fontWeight: '700'}}>{value}</Text>
+                    <IconButton icon="plus" size={18} mode="contained" onPress={() => setTagValue(t.id, date, value + 1)} accessibilityLabel={`Add one ${t.name}`} />
+                  </>
+                )}
               </View>
-              <IconButton icon="minus" size={18} mode="outlined" disabled={count === 0} onPress={() => setTagValue(t.id, date, count - 1)} accessibilityLabel={`Remove one ${t.name}`} />
-              <Text variant="titleLarge" style={{minWidth: 28, textAlign: 'center', color: count ? chart.inkPrimary : chart.inkMuted, fontWeight: '700'}}>{count}</Text>
-              <IconButton icon="plus" size={18} mode="contained" onPress={() => setTagValue(t.id, date, count + 1)} accessibilityLabel={`Add one ${t.name}`} />
+              {(fraction != null || stats.thisWeek.total > 0) && (
+                <View style={{gap: 4}}>
+                  <Text variant="labelSmall" style={{color: fraction != null ? limitColor(fraction, chart.status, chart.inkSecondary) : chart.inkSecondary}}>
+                    {weekText}{fraction != null && fraction > 1 ? ' · over limit' : ''}
+                  </Text>
+                  {fraction != null && <LimitBar fraction={fraction} color={color} />}
+                </View>
+              )}
             </Panel>
           );
         })}
       </ScrollView>
       <FAB icon="plus" label="New tag" style={{position: 'absolute', right: 16, bottom: 16}} onPress={() => setAdding(true)} />
-      <TagNameDialog
+      <TagEditDialog
         visible={adding}
         title="New tag"
         onDismiss={() => setAdding(false)}
-        onSubmit={async (name) => {
+        onSubmit={async (update) => {
           setAdding(false);
-          await createTag(name);
+          await createTag(update);
+        }}
+      />
+      <TagAmountDialog
+        tag={amountTag}
+        date={date}
+        current={amountTag ? valueFor(amountTag.id) : 0}
+        onDismiss={() => setAmountTag(null)}
+        onSubmit={async (v) => {
+          const t = amountTag;
+          setAmountTag(null);
+          if (t) await setTagValue(t.id, date, v);
         }}
       />
     </View>

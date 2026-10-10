@@ -49,4 +49,8 @@ export const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  `
+  ALTER TABLE tags ADD COLUMN unit TEXT;
+  ALTER TABLE tags ADD COLUMN weekly_limit REAL;
+  `,
 ];

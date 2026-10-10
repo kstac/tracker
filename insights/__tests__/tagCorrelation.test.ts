@@ -4,7 +4,7 @@ import {computeTagEffects} from '@/insights/tagCorrelation';
 import {daily, TODAY} from '@/insights/__fixtures__/series';
 import {Tag, TagEntry} from '@/metrics/types';
 
-const alcohol: Tag = {id: 'alcohol', name: 'Alcohol', createdAt: 0};
+const alcohol: Tag = {id: 'alcohol', name: 'Alcohol', createdAt: 0, unit: null, weeklyLimit: null};
 
 /** 30 days of tag entries ending today; tagged on every third day. */
 function entries(tagId: string, days = 30, every = 3, value = 1): TagEntry[] {
