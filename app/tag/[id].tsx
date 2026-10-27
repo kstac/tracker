@@ -7,6 +7,7 @@ import LimitBar, {limitColor} from '@/components/tags/LimitBar';
 import TagTotalsChart, {rangeStart} from '@/components/tags/TagTotalsChart';
 import TrendBadge from '@/components/tags/TrendBadge';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
+import {EffectList} from '@/components/effects/EffectList';
 import {computeTagStats, formatTagAmount, monthlyTotals, weeklyTotals} from '@/insights/tagStats';
 import {parseIsoDate, today} from '@/lib/dates';
 import {useAppData} from '@/providers/AppData';
@@ -32,7 +33,7 @@ const days = (n: number | null) => (n == null ? '–' : `${n} ${n === 1 ? 'day' 
 export default function TagScreen() {
   const {id} = useLocalSearchParams<{id: string}>();
   const {chart} = useAppTheme();
-  const {tags, tagEntries, report, updateTag, deleteTag} = useAppData();
+  const {allTags: tags, tagEntries, report, updateTag, deleteTag, setTagArchived} = useAppData();
   const [editing, setEditing] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const [range, setRange] = useState<Range>('1y');
@@ -54,7 +55,9 @@ export default function TagScreen() {
   if (!tag) return <Text style={{padding: 16}}>Tag not found</Text>;
 
   const color = chart.series[tagIndex % chart.series.length];
-  const effects = (report?.tagEffects ?? []).filter((e) => e.tagId === id);
+  const effects = (report?.effects.effects ?? []).filter((e) => e.factorId === id);
+  const progress = report?.effects.progress.find((p) => p.factorId === id) ?? null;
+  const overlaps = (report?.effects.overlaps ?? []).filter((o) => o.a === id || o.b === id);
   const amount = (v: number) => formatTagAmount(Math.round(v * 10) / 10, tag.unit);
   const fmtDate = (d: string, weekday = false) =>
     parseIsoDate(d).toLocaleDateString(undefined, {weekday: weekday ? 'short' : undefined, day: 'numeric', month: 'short', year: 'numeric'});
@@ -73,6 +76,11 @@ export default function TagScreen() {
   return (
     <ScrollView style={{backgroundColor: chart.page}} contentContainerStyle={{paddingTop: 12, paddingBottom: 32}}>
       <Stack.Screen options={{title: tag.name}} />
+      {tag.archived && (
+        <Panel>
+          <Text style={{color: chart.inkSecondary}}>Archived. It&apos;s hidden from logging, but its history and patterns are kept.</Text>
+        </Panel>
+      )}
 
       <Panel style={{gap: 16}}>
         <View style={{gap: 6}}>
@@ -134,24 +142,13 @@ export default function TagScreen() {
       )}
 
       <Panel>
-        <PanelHeader title="How it lines up with your data" icon="chart-scatter-plot" color={chart.series[1]} />
-        <View style={{gap: 12}}>
-          {effects.length === 0 ? (
-            <Text style={{color: chart.inkMuted}}>
-              No clear pattern yet. This needs at least 5 days with and 5 days without the tag while your watch was recording, and only differences that are big enough are shown.
-            </Text>
-          ) : (
-            effects.map((e) => (
-              <View key={`${e.metric}-${e.lag}`}>
-                <Text variant="bodyMedium" style={{color: chart.inkPrimary}}>{e.summary}</Text>
-                <Text variant="bodySmall" style={{color: chart.inkMuted}}>
-                  {e.metricLabel} · effect size {Math.abs(e.cohensD).toFixed(1)} · {e.nTagged} vs {e.nUntagged} days
-                </Text>
-              </View>
-            ))
-          )}
-          <Text variant="bodySmall" style={{color: chart.inkMuted}}>These are correlations, not proof that the tag causes the change.</Text>
-        </View>
+        <PanelHeader title="How it affects you" subtitle="Compared with days you didn't log it" icon="chart-scatter-plot" color={chart.series[1]} />
+        <EffectList effects={effects} progress={progress} factorName={tag.name} />
+        {overlaps.map((o) => (
+          <Text key={`${o.a}-${o.b}`} variant="bodySmall" style={{color: chart.status.warning, marginTop: 8}}>
+            Often logged on the same days as {o.a === id ? o.bName : o.aName} ({Math.round(o.jaccard * 100)}% overlap).
+          </Text>
+        ))}
       </Panel>
 
       <Panel padded={false}>
@@ -175,6 +172,9 @@ export default function TagScreen() {
 
       <View style={{flexDirection: 'row', gap: 8, marginHorizontal: 16}}>
         <Button mode="outlined" icon="pencil-outline" onPress={() => setEditing(true)}>Edit</Button>
+        <Button mode="outlined" icon={tag.archived ? 'archive-arrow-up-outline' : 'archive-outline'} onPress={() => setTagArchived(tag.id, !tag.archived)}>
+          {tag.archived ? 'Restore' : 'Archive'}
+        </Button>
         <Button mode="outlined" icon="trash-can-outline" textColor={chart.status.critical} onPress={confirmDelete}>Delete</Button>
       </View>
       <TagEditDialog

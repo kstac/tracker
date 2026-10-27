@@ -1,12 +1,14 @@
 import {useState} from 'react';
 import {Pressable, ScrollView, View} from 'react-native';
 import {router} from 'expo-router';
-import {FAB, IconButton, Text} from 'react-native-paper';
+import {Button, FAB, IconButton, Text, TextInput} from 'react-native-paper';
 import TagEditDialog from '@/components/TagEditDialog';
 import LimitBar, {limitColor} from '@/components/tags/LimitBar';
 import TagAmountDialog from '@/components/tags/TagAmountDialog';
 import IconBadge from '@/components/ui/IconBadge';
-import {Panel} from '@/components/ui/Panel';
+import {Panel, PanelHeader, SectionHeader} from '@/components/ui/Panel';
+import CheckInCard from '@/components/journal/CheckInCard';
+import StatusControl from '@/components/journal/StatusControl';
 import {computeTagStats, formatTagAmount} from '@/insights/tagStats';
 import {addDays, IsoDate, parseIsoDate, today} from '@/lib/dates';
 import {Tag} from '@/metrics/types';
@@ -21,7 +23,9 @@ function sinceText(daysSince: number | null) {
 
 export default function TagsScreen() {
   const {chart, colors} = useAppTheme();
-  const {tags, tagEntries, setTagValue, createTag} = useAppData();
+  const {tags, allTags, tagEntries, notes, setTagValue, createTag, setNote} = useAppData();
+  const [showArchived, setShowArchived] = useState(false);
+  const archived = allTags.filter((t) => t.archived);
   const [date, setDate] = useState<IsoDate>(today());
   const [adding, setAdding] = useState(false);
   const [amountTag, setAmountTag] = useState<Tag | null>(null);
@@ -39,7 +43,11 @@ export default function TagsScreen() {
         </Pressable>
         <IconButton icon="chevron-right" disabled={isToday} onPress={() => setDate(addDays(date, 1))} accessibilityLabel="Next day" />
       </View>
-      <ScrollView contentContainerStyle={{paddingBottom: 96, paddingTop: 4}}>
+      <ScrollView contentContainerStyle={{paddingBottom: 96, paddingTop: 4}} keyboardShouldPersistTaps="handled">
+        <StatusControl showWhenNormal={false} />
+        <CheckInCard key={date} date={date} title={isToday ? 'How do you feel today?' : 'How did you feel?'} compactWhenDone />
+        <NoteCard key={`note-${date}`} date={date} initial={notes.find((n) => n.date === date)?.text ?? ''} onSave={(t) => setNote(date, t)} />
+        <SectionHeader title="Tags" />
         {tags.length === 0 && (
           <Panel>
             <Text style={{color: chart.inkSecondary}}>
@@ -89,6 +97,17 @@ export default function TagsScreen() {
             </Panel>
           );
         })}
+        {archived.length > 0 && (
+          <>
+            <SectionHeader title="Archived" right={<Button compact onPress={() => setShowArchived(!showArchived)}>{showArchived ? 'Hide' : `Show ${archived.length}`}</Button>} />
+            {showArchived && archived.map((t) => (
+              <Panel key={t.id} onPress={() => router.push({pathname: '/tag/[id]', params: {id: t.id}})} style={{flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10}}>
+                <IconBadge icon="archive-outline" color={chart.inkMuted} size={30} />
+                <Text variant="bodyLarge" style={{color: chart.inkSecondary, flex: 1}}>{t.name}</Text>
+              </Panel>
+            ))}
+          </>
+        )}
       </ScrollView>
       <FAB icon="plus" label="New tag" style={{position: 'absolute', right: 16, bottom: 16}} onPress={() => setAdding(true)} />
       <TagEditDialog
@@ -112,5 +131,36 @@ export default function TagsScreen() {
         }}
       />
     </View>
+  );
+}
+
+function NoteCard({date, initial, onSave}: {date: IsoDate; initial: string; onSave: (text: string) => void}) {
+  const {chart} = useAppTheme();
+  const [text, setText] = useState(initial);
+  const [editing, setEditing] = useState(false);
+  if (!editing && !initial) {
+    return (
+      <Panel onPress={() => setEditing(true)} style={{flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10}}>
+        <IconBadge icon="note-edit-outline" color={chart.series[6]} size={30} />
+        <Text variant="bodyMedium" style={{color: chart.inkSecondary, flex: 1}}>Add a note about this day</Text>
+      </Panel>
+    );
+  }
+  if (!editing) {
+    return (
+      <Panel onPress={() => setEditing(true)}>
+        <PanelHeader title="Note" icon="note-text-outline" color={chart.series[6]} />
+        <Text variant="bodyMedium" style={{color: chart.inkPrimary}}>{initial}</Text>
+      </Panel>
+    );
+  }
+  return (
+    <Panel>
+      <TextInput mode="outlined" label="Note" value={text} onChangeText={setText} multiline autoFocus placeholder="Late dinner, long flight, felt run down…" />
+      <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8}}>
+        <Button onPress={() => { setText(initial); setEditing(false); }}>Cancel</Button>
+        <Button onPress={() => { onSave(text); setEditing(false); }}>Save</Button>
+      </View>
+    </Panel>
   );
 }

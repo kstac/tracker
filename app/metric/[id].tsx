@@ -1,7 +1,8 @@
 import {useEffect, useMemo, useState} from 'react';
-import {ScrollView, View} from 'react-native';
+import {Alert, ScrollView, View} from 'react-native';
 import {Stack, useLocalSearchParams} from 'expo-router';
-import {Chip, DataTable, IconButton, SegmentedButtons, Text} from 'react-native-paper';
+import {Button, Chip, DataTable, IconButton, SegmentedButtons, Text} from 'react-native-paper';
+import ManualValueDialog from '@/components/ManualValueDialog';
 import IntradayChart from '@/components/charts/IntradayChart';
 import TrendChart from '@/components/charts/TrendChart';
 import {getSamples} from '@/db/repo';
@@ -40,7 +41,8 @@ export default function MetricScreen() {
   const {id} = useLocalSearchParams<{id: MetricId}>();
   const def = METRIC_BY_ID[id];
   const {chart} = useAppTheme();
-  const {daily, tags, tagEntries} = useAppData();
+  const {daily, tags, tagEntries, setManualValue} = useAppData();
+  const [adding, setAdding] = useState(false);
   const [rangeKey, setRangeKey] = useState<(typeof RANGES)[number]['value']>('30');
   const [tagId, setTagId] = useState<string | null>(null);
   const [day, setDay] = useState<IsoDate>(today());
@@ -89,6 +91,12 @@ export default function MetricScreen() {
           buttons={RANGES.map((r) => ({value: r.value, label: r.label}))}
         />
       </View>
+
+      {def.manualEntry && (
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginHorizontal: 16, marginTop: -8, marginBottom: 8}}>
+          <Button icon="plus" mode="contained-tonal" onPress={() => setAdding(true)}>Add a reading</Button>
+        </View>
+      )}
 
       <Panel>
         <View style={{flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12}}>
@@ -167,13 +175,27 @@ export default function MetricScreen() {
         <Text variant="titleMedium" style={{color: chart.inkPrimary, fontWeight: '600', padding: 16, paddingBottom: 4}}>Recent days</Text>
         <DataTable>
           {[...raw].reverse().slice(0, 14).map((p) => (
-            <DataTable.Row key={p.date}>
+            <DataTable.Row
+              key={p.date}
+              onLongPress={def.manualEntry ? () => Alert.alert('Delete this reading?', `${fmtDay(p.date)}: ${fmt(p.value)}. Synced values for the day stay.`, [
+                {text: 'Cancel', style: 'cancel'},
+                {text: 'Delete', style: 'destructive', onPress: () => setManualValue(def.id, p.date, null)},
+              ]) : undefined}
+            >
               <DataTable.Cell>{fmtDay(p.date)}</DataTable.Cell>
               <DataTable.Cell numeric>{fmt(p.value)}</DataTable.Cell>
             </DataTable.Row>
           ))}
         </DataTable>
       </Panel>
+      <ManualValueDialog
+        def={adding ? def : null}
+        onDismiss={() => setAdding(false)}
+        onSubmit={async (date, value) => {
+          setAdding(false);
+          await setManualValue(def.id, date, value);
+        }}
+      />
     </ScrollView>
   );
 }

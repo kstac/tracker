@@ -3,7 +3,7 @@ import {router} from 'expo-router';
 import {Button, Text} from 'react-native-paper';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
 import {scoreColor} from '@/components/ScoreRing';
-import {Contributor, Score, ScoreKind, ScoreLabel} from '@/insights';
+import {ACTION_TEXT, Contributor, Score, ScoreKind, ScoreLabel} from '@/insights';
 import {useAppTheme} from '@/theme';
 
 function contributorLabel(score: number): ScoreLabel {
@@ -29,7 +29,9 @@ export function ContributorList({contributors}: {contributors: Contributor[]}) {
             <View style={{height: 6, borderRadius: 3, backgroundColor: chart.grid, marginVertical: 6, overflow: 'hidden'}}>
               <View style={{width: `${Math.max(3, Math.min(100, c.score))}%`, height: '100%', borderRadius: 3, backgroundColor: color}} />
             </View>
-            <Text variant="bodySmall" style={{color: chart.inkSecondary}}>{c.detail}</Text>
+            <Text variant="bodySmall" style={{color: chart.inkSecondary}}>
+              {c.detail}{c.impact != null && c.impact >= 1 ? <Text style={{color: chart.inkMuted}}>{` · costs ${Math.round(c.impact)} ${Math.round(c.impact) === 1 ? 'point' : 'points'}`}</Text> : null}
+            </Text>
           </View>
         );
       })}
@@ -37,18 +39,19 @@ export function ContributorList({contributors}: {contributors: Contributor[]}) {
   );
 }
 
-type Props = {title: string; score: Score; icon: string; kind?: ScoreKind};
+type Props = {title: string; score: Score; icon: string; kind?: ScoreKind; note?: string};
 
-export default function ScoreDetails({title, score, icon, kind}: Props) {
+export default function ScoreDetails({title, score, icon, kind, note}: Props) {
   const {chart} = useAppTheme();
   return (
     <Panel>
       <PanelHeader
         title={`${title} · ${score.value}`}
-        subtitle={score.calibrating ? 'Still learning your baseline. Scores firm up after about 2 weeks of data.' : `${score.label} · what's driving it`}
+        subtitle={score.calibrating ? 'Still learning your baseline. Scores firm up after about 2 weeks of data.' : `${score.action ? ACTION_TEXT[score.action].label : score.label} · what's driving it`}
         icon={icon}
         color={scoreColor(score.label, chart.status)}
       />
+      {note && <Text variant="bodySmall" style={{color: chart.inkSecondary, marginBottom: 12}}>{note}</Text>}
       <ContributorList contributors={score.contributors} />
       {kind && (
         <Button

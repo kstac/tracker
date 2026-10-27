@@ -9,15 +9,20 @@ import TagAmountDialog from '@/components/tags/TagAmountDialog';
 import {formatTagAmount} from '@/insights/tagStats';
 import ScoreDetails from '@/components/ScoreDetails';
 import ScoreRing from '@/components/ScoreRing';
-import StatTile from '@/components/StatTile';
 import SyncStatus from '@/components/SyncStatus';
 import {Panel, PanelHeader, SectionHeader} from '@/components/ui/Panel';
-import {computeBedtimeShift, computeSleepDebt, Score} from '@/insights';
+import {ACTION_TEXT, computeBedtimeShift, Score, topDrags} from '@/insights';
+import {median} from '@/insights/stats';
 import SleepDebtPanel, {shiftText} from '@/components/SleepDebtPanel';
-import {formatClock, formatMinutes, minutesFromMidnight, nightLabel, parseIsoDate, today} from '@/lib/dates';
-import {formatMetricValue} from '@/lib/format';
-import {METRIC_BY_ID} from '@/metrics/registry';
-import {MetricId, SleepNight, Tag} from '@/metrics/types';
+import CheckInCard from '@/components/journal/CheckInCard';
+import StatusControl from '@/components/journal/StatusControl';
+import ActivityPanel from '@/components/today/ActivityPanel';
+import BodyCheckPanel from '@/components/today/BodyCheckPanel';
+import SleepPlanPanel from '@/components/today/SleepPlanPanel';
+import StressPanel from '@/components/today/StressPanel';
+import YesterdayPrompt from '@/components/today/YesterdayPrompt';
+import {addDays, formatClock, formatMinutes, IsoDate, minutesFromMidnight, nightLabel, parseIsoDate, today} from '@/lib/dates';
+import {SleepNight, Tag} from '@/metrics/types';
 import {useAppData} from '@/providers/AppData';
 import {useAppTheme} from '@/theme';
 
@@ -64,16 +69,32 @@ function StageBar({night}: {night: SleepNight}) {
   );
 }
 
+function ReadinessSummary({score}: {score: Score}) {
+  const {chart} = useAppTheme();
+  if (!score.action || score.calibrating) return null;
+  const drags = topDrags(score);
+  return (
+    <View style={{paddingHorizontal: 24, gap: 2, marginBottom: 6}}>
+      <Text variant="bodyMedium" style={{color: chart.inkPrimary, textAlign: 'center'}}>{ACTION_TEXT[score.action].advice}</Text>
+      {drags.length > 0 && (
+        <Text variant="bodySmall" style={{color: chart.inkSecondary, textAlign: 'center'}}>
+          Held back by {drags.map((d) => `${d.label.toLowerCase()} (−${Math.round(d.impact ?? 0)})`).join(' and ')}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 export default function TodayScreen() {
   const {chart, colors} = useAppTheme();
   const insets = useSafeAreaInsets();
-  const {report, daily, sleep, tags, tagEntries, syncing, sync, setTagValue, loading} = useAppData();
+  const {report, daily, sleep, tags, tagEntries, activities, syncing, sync, setTagValue, loading} = useAppData();
   const [openScore, setOpenScore] = useState<ScoreKey | null>(null);
   const [showAllInsights, setShowAllInsights] = useState(false);
-  const [amountTag, setAmountTag] = useState<Tag | null>(null);
+  const [amount, setAmount] = useState<{tag: Tag; date: IsoDate} | null>(null);
   const date = today();
+  const yesterday = addDays(date, -1);
 
-  const value = (metric: MetricId) => daily[metric]?.get(date) ?? null;
   const lastNight = [...sleep].reverse().find((n) => n.date <= date);
   const hasAnyData = Object.keys(daily).length > 0;
   const insights = report?.insights ?? [];
@@ -85,22 +106,29 @@ export default function TodayScreen() {
     activity: report?.activity ?? null,
   };
   const open = openScore ? scores[openScore] : null;
-  const sleepDebt = computeSleepDebt(sleep, date);
+  const plan = report?.sleepPlan ?? null;
   const bedtime = computeBedtimeShift(daily, date);
   const toggle = (key: ScoreKey) => scores[key] && setOpenScore(openScore === key ? null : key);
+  const garminScore = lastNight ? daily.garmin_sleep_score?.get(lastNight.date) : undefined;
 
-  const tile = (metric: MetricId, label?: string) => {
-    const def = METRIC_BY_ID[metric];
-    return (
-      <StatTile
-        key={metric}
-        label={label ?? def.label}
-        value={formatMetricValue(def, value(metric))}
-        icon={def.icon}
-        color={chart.category[def.category]}
-        onPress={() => router.push({pathname: '/metric/[id]', params: {id: metric}})}
-      />
-    );
+  const recentScores = report ? [...report.sleepScores.entries()].filter(([d]) => d < date && d >= addDays(date, -30)).map(([, v]) => v) : [];
+  const usualScore = recentScores.length >= 7 ? median(recentScores) : null;
+  const lastScore = report?.sleep?.date === date ? report.sleep.value : null;
+  const unusualNight = lastScore != null && usualScore != null && lastScore <= usualScore - 8;
+  const strained = (report?.bodyCheck.radar.level ?? 'none') !== 'none';
+  const loggedYesterday = tagEntries.some((e) => e.date === yesterday && e.value > 0);
+  const promptReason = unusualNight
+    ? `Last night scored ${lastScore}, below your usual ${Math.round(usualScore!)}.`
+    : 'Your body check shows some strain this morning.';
+
+  // Once shown, keep the prompt up for the session so several tags can be logged from it.
+  const wantPrompt = tags.length > 0 && (unusualNight || strained) && !loggedYesterday;
+  const [promptFor, setPromptFor] = useState<IsoDate | null>(null);
+  if (wantPrompt && promptFor !== date) setPromptFor(date);
+
+  const logTag = (t: Tag, d: IsoDate, current: number) => {
+    if (t.unit) setAmount({tag: t, date: d});
+    else setTagValue(t.id, d, current + 1);
   };
 
   return (
@@ -113,11 +141,14 @@ export default function TodayScreen() {
         colors={[colors.primaryContainer, chart.page]}
         style={{paddingTop: insets.top + 20, paddingBottom: 8}}
       >
-        <View style={{paddingHorizontal: 20, marginBottom: 4}}>
-          <Text variant="headlineMedium" style={{color: chart.inkPrimary, fontWeight: '700'}}>{greeting()}</Text>
-          <Text variant="bodyLarge" style={{color: chart.inkSecondary}}>
-            {parseIsoDate(date).toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'long'})}
-          </Text>
+        <View style={{paddingHorizontal: 20, marginBottom: 4, flexDirection: 'row', alignItems: 'flex-start'}}>
+          <View style={{flex: 1}}>
+            <Text variant="headlineMedium" style={{color: chart.inkPrimary, fontWeight: '700'}}>{greeting()}</Text>
+            <Text variant="bodyLarge" style={{color: chart.inkSecondary}}>
+              {parseIsoDate(date).toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'long'})}
+            </Text>
+          </View>
+          {!report?.status && <StatusControl />}
         </View>
         <View style={{paddingHorizontal: 4}}>
           <SyncStatus />
@@ -125,7 +156,14 @@ export default function TodayScreen() {
 
         <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', paddingVertical: 12}}>
           <Pressable onPress={() => toggle('readiness')}>
-            <ScoreRing title="Readiness" value={scores.readiness?.value ?? null} label={scores.readiness?.label} calibrating={scores.readiness?.calibrating} size={150} />
+            <ScoreRing
+              title="Readiness"
+              value={scores.readiness?.value ?? null}
+              label={scores.readiness?.label}
+              caption={scores.readiness?.action ? ACTION_TEXT[scores.readiness.action].label : undefined}
+              calibrating={scores.readiness?.calibrating}
+              size={150}
+            />
           </Pressable>
           <View style={{gap: 16}}>
             {(['sleep', 'activity'] as ScoreKey[]).map((key) => (
@@ -135,10 +173,21 @@ export default function TodayScreen() {
             ))}
           </View>
         </View>
+        {scores.readiness && <ReadinessSummary score={scores.readiness} />}
         <Text variant="labelSmall" style={{color: chart.inkMuted, textAlign: 'center', marginBottom: 4}}>Tap a score to see what&apos;s driving it</Text>
       </LinearGradient>
 
-      {open && openScore && <ScoreDetails kind={openScore} title={SCORE_META[openScore].title} icon={SCORE_META[openScore].icon} score={open} />}
+      {open && openScore && (
+        <ScoreDetails
+          kind={openScore}
+          title={SCORE_META[openScore].title}
+          icon={SCORE_META[openScore].icon}
+          score={open}
+          note={openScore === 'sleep' && garminScore != null ? `Garmin scored this night ${Math.round(garminScore)}.` : undefined}
+        />
+      )}
+
+      <StatusControl showWhenNormal={false} />
 
       {!loading && !hasAnyData && (
         <Panel>
@@ -147,12 +196,21 @@ export default function TodayScreen() {
         </Panel>
       )}
 
+      {hasAnyData && <CheckInCard date={date} title="Morning check-in" />}
+      {promptFor === date && (unusualNight || strained || loggedYesterday) && (
+        <YesterdayPrompt date={date} reason={promptReason} tags={tags} tagEntries={tagEntries} onLog={logTag} />
+      )}
+
+      {report && <BodyCheckPanel check={report.bodyCheck} />}
+
+      {(lastNight || plan) && <SectionHeader title="Sleep" />}
       {lastNight && (
         <Panel onPress={() => router.push({pathname: '/metric/[id]', params: {id: 'sleep_total_min'}})}>
           <PanelHeader
             title={lastNight.date === date ? 'Last night' : nightLabel(lastNight.date)}
             subtitle={`${formatClock(minutesFromMidnight(lastNight.startTs, lastNight.date))} → ${formatClock(minutesFromMidnight(lastNight.endTs, lastNight.date))}` +
-              (bedtime && lastNight.date >= date ? ` · bed ${shiftText(bedtime.lastDelta)}` : '')}
+              (bedtime && lastNight.date >= date ? ` · bed ${shiftText(bedtime.lastDelta)}` : '') +
+              (garminScore != null ? ` · Garmin score ${Math.round(garminScore)}` : '')}
             icon="weather-night"
             color={chart.category.sleep}
             right={
@@ -164,18 +222,16 @@ export default function TodayScreen() {
           <StageBar night={lastNight} />
         </Panel>
       )}
+      {plan && lastNight && <SleepPlanPanel plan={plan} />}
+      {plan?.debt && <SleepDebtPanel debt={plan.debt} bedtime={bedtime} />}
 
-      {sleepDebt && <SleepDebtPanel debt={sleepDebt} bedtime={bedtime} />}
-
-      <SectionHeader title="Today" />
-      <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, marginBottom: 8}}>
-        {tile('body_battery_wake', 'Body Battery at wake')}
-        {tile('garmin_sleep_score')}
-        {tile('resting_hr')}
-        {tile('stress_avg')}
-        {tile('steps')}
-        {tile('active_kcal')}
-      </View>
+      {report && hasAnyData && (
+        <>
+          <SectionHeader title="Today" />
+          <ActivityPanel date={date} steps={daily.steps?.get(date) ?? null} stepGoal={report.stepGoal} load={report.load} activities={activities} />
+          <StressPanel date={date} daily={daily} />
+        </>
+      )}
 
       <SectionHeader
         title="Insights"
@@ -193,14 +249,14 @@ export default function TodayScreen() {
 
       {tags.length > 0 && (
         <>
-          <SectionHeader title="Log today" />
+          <SectionHeader title="Log today" right={<Button compact onPress={() => router.push('/tags')}>Journal</Button>} />
           <Panel>
             <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
               {tags.map((t) => {
                 const count = tagEntries.find((e) => e.tagId === t.id && e.date === date)?.value ?? 0;
                 if (t.unit) {
                   return (
-                    <Chip key={t.id} selected={count > 0} showSelectedOverlay icon={count > 0 ? 'check' : 'scale-balance'} onPress={() => setAmountTag(t)}>
+                    <Chip key={t.id} selected={count > 0} showSelectedOverlay icon={count > 0 ? 'check' : 'scale-balance'} onPress={() => setAmount({tag: t, date})}>
                       {count > 0 ? `${t.name} · ${formatTagAmount(count, t.unit)}` : t.name}
                     </Chip>
                   );
@@ -221,19 +277,19 @@ export default function TodayScreen() {
             </View>
             <Text variant="labelSmall" style={{color: chart.inkMuted, marginTop: 10}}>Tap to add one, long-press to remove one. Amount tags open an input.</Text>
           </Panel>
-          <TagAmountDialog
-            tag={amountTag}
-            date={date}
-            current={amountTag ? tagEntries.find((e) => e.tagId === amountTag.id && e.date === date)?.value ?? 0 : 0}
-            onDismiss={() => setAmountTag(null)}
-            onSubmit={async (v) => {
-              const t = amountTag;
-              setAmountTag(null);
-              if (t) await setTagValue(t.id, date, v);
-            }}
-          />
         </>
       )}
+      <TagAmountDialog
+        tag={amount?.tag ?? null}
+        date={amount?.date ?? date}
+        current={amount ? tagEntries.find((e) => e.tagId === amount.tag.id && e.date === amount.date)?.value ?? 0 : 0}
+        onDismiss={() => setAmount(null)}
+        onSubmit={async (v) => {
+          const a = amount;
+          setAmount(null);
+          if (a) await setTagValue(a.tag.id, a.date, v);
+        }}
+      />
     </ScrollView>
   );
 }

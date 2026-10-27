@@ -10,9 +10,10 @@ export function scoreColor(label: ScoreLabel, status: {good: string; warning: st
   return status.serious;
 }
 
-type Props = {value: number | null; label?: ScoreLabel; title: string; size?: number; calibrating?: boolean; stroke?: number};
+/** `caption` replaces the label text under the score, e.g. a readiness action. */
+type Props = {value: number | null; label?: ScoreLabel; title: string; size?: number; calibrating?: boolean; stroke?: number; caption?: string};
 
-export default function ScoreRing({value, label, title, size = 96, calibrating, stroke}: Props) {
+export default function ScoreRing({value, label, title, size = 96, calibrating, stroke, caption}: Props) {
   const {chart} = useAppTheme();
   const width = stroke ?? Math.max(7, size * 0.085);
   const r = (size - width) / 2;
@@ -53,7 +54,7 @@ export default function ScoreRing({value, label, title, size = 96, calibrating, 
           </Text>
           {big && (
             <Text variant="labelMedium" style={{color: calibrating ? chart.inkMuted : color}}>
-              {calibrating ? 'Calibrating' : label ?? 'No data'}
+              {calibrating ? 'Calibrating' : caption ?? label ?? 'No data'}
             </Text>
           )}
         </View>
@@ -61,7 +62,7 @@ export default function ScoreRing({value, label, title, size = 96, calibrating, 
       <Text variant={big ? 'titleMedium' : 'labelLarge'} style={{marginTop: 8, color: chart.inkPrimary, fontWeight: '600'}}>{title}</Text>
       {!big && (
         <Text variant="labelSmall" style={{color: calibrating ? chart.inkMuted : chart.inkSecondary}}>
-          {calibrating ? 'Calibrating' : label ?? 'No data'}
+          {calibrating ? 'Calibrating' : caption ?? label ?? 'No data'}
         </Text>
       )}
     </View>

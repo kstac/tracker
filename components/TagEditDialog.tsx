@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {View} from 'react-native';
-import {Button, Dialog, HelperText, Portal, SegmentedButtons, TextInput} from 'react-native-paper';
+import {Button, Chip, Dialog, HelperText, Portal, SegmentedButtons, Text, TextInput} from 'react-native-paper';
 import {unitFromName} from '@/insights/tagStats';
 import {TagUpdate} from '@/metrics/types';
 
@@ -22,6 +22,24 @@ export default function TagEditDialog({visible, title, initial, onDismiss, onSub
     </Portal>
   );
 }
+
+/** Common things people track, matching what wearable journals find matters most. */
+export const TAG_PRESETS: TagUpdate[] = [
+  {name: 'Alcohol', unit: 'drinks', weeklyLimit: null},
+  {name: 'Caffeine', unit: 'cups', weeklyLimit: null},
+  {name: 'Late meal', unit: null, weeklyLimit: null},
+  {name: 'Screens in bed', unit: null, weeklyLimit: null},
+  {name: 'Meditation', unit: null, weeklyLimit: null},
+  {name: 'Sauna', unit: null, weeklyLimit: null},
+  {name: 'Stretching', unit: null, weeklyLimit: null},
+  {name: 'Sugary food', unit: null, weeklyLimit: null},
+  {name: 'Stressful day', unit: null, weeklyLimit: null},
+  {name: 'Social time', unit: null, weeklyLimit: null},
+  {name: 'Time outdoors', unit: null, weeklyLimit: null},
+  {name: 'Nicotine', unit: 'mg', weeklyLimit: null},
+  {name: 'Melatonin', unit: null, weeklyLimit: null},
+  {name: 'Cold shower', unit: null, weeklyLimit: null},
+];
 
 function parseLimit(text: string): number | null | 'invalid' {
   const t = text.trim();
@@ -61,7 +79,22 @@ function TagForm({initial, onDismiss, onSubmit}: Omit<Props, 'visible' | 'title'
   return (
     <>
       <Dialog.Content style={{gap: 12}}>
-        <TextInput label="Name" mode="outlined" value={name} onChangeText={onNameChange} autoFocus={!initial} placeholder="e.g. Alcohol, Late meal, Nicotine (mg)" />
+        {!initial && !name && (
+          <View style={{gap: 6}}>
+            <Text variant="labelMedium">Quick picks</Text>
+            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6}}>
+              {TAG_PRESETS.map((p) => (
+                <Chip key={p.name} compact onPress={() => {
+                  setName(p.name);
+                  setMode(p.unit ? 'amount' : 'count');
+                  setUnit(p.unit ?? '');
+                  setUnitTouched(true);
+                }}>{p.name}</Chip>
+              ))}
+            </View>
+          </View>
+        )}
+        <TextInput label="Name" mode="outlined" value={name} onChangeText={onNameChange} autoFocus={false} placeholder="e.g. Alcohol, Late meal, Nicotine (mg)" />
         <SegmentedButtons
           value={mode}
           onValueChange={(v) => setMode(v as 'count' | 'amount')}

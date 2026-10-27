@@ -36,6 +36,14 @@ export default function RootLayout() {
                   <Stack.Screen name="(tabs)" options={{headerShown: false}} />
                   <Stack.Screen name="metric/[id]" options={{title: ''}} />
                   <Stack.Screen name="tag/[id]" options={{title: ''}} />
+                  <Stack.Screen name="scores/[kind]" options={{title: ''}} />
+                  <Stack.Screen name="factor/[id]" options={{title: ''}} />
+                  <Stack.Screen name="report/[month]" options={{title: 'Monthly report'}} />
+                  <Stack.Screen name="experiment/new" options={{title: 'New experiment'}} />
+                  <Stack.Screen name="experiment/[id]" options={{title: ''}} />
+                  <Stack.Screen name="training" options={{title: 'Training'}} />
+                  <Stack.Screen name="body" options={{title: 'Body check'}} />
+                  <Stack.Screen name="ask" options={{title: 'Ask about your data'}} />
                   <Stack.Screen name="garmin-login" options={{title: 'Sign in to Garmin', presentation: 'modal'}} />
                   <Stack.Screen name="+not-found" options={{headerShown: false}} />
                 </Stack>

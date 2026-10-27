@@ -3,6 +3,11 @@ import {Alert, Platform, ScrollView, View} from 'react-native';
 import {router, useFocusEffect} from 'expo-router';
 import {Button, Dialog, Divider, Menu, Portal, SegmentedButtons, Switch, Text} from 'react-native-paper';
 import {Panel, PanelHeader, SectionHeader} from '@/components/ui/Panel';
+import EditValueDialog, {EditSpec} from '@/components/settings/EditValueDialog';
+import ChangelogPanel from '@/components/settings/ChangelogPanel';
+import {AI_MODELS, getApiKey, getModel, setApiKey, setModel} from '@/lib/ai';
+import {activitiesCsv, dailyCsv, shareCsv} from '@/lib/exportCsv';
+import {baselineNeed} from '@/insights';
 import {backupSummary, exportBackup, pickBackup, restoreBackup} from '@/db/backup';
 import {DEFAULT_PREFS, getPrefs, NotificationPrefs, permissionGranted, requestPermission, setPrefs} from '@/lib/notifications';
 import {dumpDatabase, getLegacyImportReport, kvGet, LegacyImportReport, migrateLegacyTrackers} from '@/db/repo';
@@ -21,7 +26,7 @@ import {
 import {useAppData} from '@/providers/AppData';
 import {ThemePreference, useThemePreference} from '@/providers/ThemePreference';
 import {useAppTheme} from '@/theme';
-import {addDays, today} from '@/lib/dates';
+import {addDays, formatClock, formatMinutes, today} from '@/lib/dates';
 
 const HC_TEXT: Record<HealthConnectStatus, string> = {
   unavailable: 'Health Connect is not available on this phone',
@@ -59,6 +64,16 @@ function formatImportReport(r: LegacyImportReport | null) {
 const REMINDER_TIMES = [19, 20, 21, 22].map((hour) => ({hour, minute: 0}));
 const pad = (n: number) => String(n).padStart(2, '0');
 
+function ValueRow({title, value, onPress}: {title: string; value: string; onPress: () => void}) {
+  const {chart} = useAppTheme();
+  return (
+    <View style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 6}}>
+      <Text variant="bodyLarge" style={{color: chart.inkPrimary, flex: 1}}>{title}</Text>
+      <Button compact onPress={onPress}>{value}</Button>
+    </View>
+  );
+}
+
 function ToggleRow({title, subtitle, value, onChange, disabled, right}: {
   title: string; subtitle: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean; right?: ReactNode;
 }) {
@@ -78,7 +93,11 @@ function ToggleRow({title, subtitle, value, onChange, disabled, right}: {
 export default function SettingsScreen() {
   const {chart} = useAppTheme();
   const {preference, setPreference} = useThemePreference();
-  const {sync, syncing, lastSync, reload, daily} = useAppData();
+  const {sync, syncing, lastSync, reload, daily, sleep, settings, updateSettings, report, allTags, tagEntries, notes, activities} = useAppData();
+  const [edit, setEdit] = useState<EditSpec | null>(null);
+  const [ai, setAi] = useState<{hasKey: boolean; model: string}>({hasKey: false, model: AI_MODELS[0].id});
+  const [modelMenu, setModelMenu] = useState(false);
+  const [sexMenu, setSexMenu] = useState(false);
   const [hc, setHc] = useState<HealthConnectStatus | null>(null);
   const [hcHistory, setHcHistory] = useState(false);
   const [garmin, setGarmin] = useState<{connected: boolean; name: string | null; hrv: string | null}>({connected: false, name: null, hrv: null});
@@ -95,6 +114,7 @@ export default function SettingsScreen() {
     setGarmin({connected: !!tokens, name: await kvGet('garmin.display_name'), hrv: await kvGet('garmin.hrv_support')});
     setNotif(await getPrefs());
     setNotifAllowed(await permissionGranted());
+    setAi({hasKey: !!(await getApiKey()), model: await getModel()});
   }, []);
 
   const updateNotif = async (patch: Partial<NotificationPrefs>) => {
@@ -204,6 +224,9 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={{backgroundColor: chart.page}} contentContainerStyle={{paddingTop: 4, paddingBottom: 32}}>
+      <SectionHeader title="What's new" />
+      <ChangelogPanel />
+
       <SectionHeader title="Appearance" />
       <Panel>
         <PanelHeader title="Theme" icon="theme-light-dark" color={chart.series[6]} />
@@ -215,6 +238,67 @@ export default function SettingsScreen() {
             {value: 'light', label: 'Light', icon: 'white-balance-sunny'},
             {value: 'dark', label: 'Dark', icon: 'weather-night'},
           ]}
+        />
+      </Panel>
+
+      <SectionHeader title="Goals & profile" />
+      <Panel>
+        <PanelHeader title="Goals" subtitle="Leave on Auto to let the app work them out" icon="flag-checkered" color={chart.category.activity} />
+        <ValueRow
+          title="Daily steps"
+          value={settings.stepGoal ? settings.stepGoal.toLocaleString() : `Auto (${(report?.stepGoal ?? 8000).toLocaleString()})`}
+          onPress={() => setEdit({title: 'Daily step goal', label: 'Steps', kind: 'number', min: 500, max: 100000, initial: settings.stepGoal ? String(settings.stepGoal) : '', hint: 'Empty uses the goal from Garmin Connect', onSave: (v) => updateSettings({stepGoal: v as number | null})})}
+        />
+        <ValueRow
+          title="Sleep need"
+          value={settings.sleepNeedMin ? formatMinutes(settings.sleepNeedMin) : `Auto (${formatMinutes(baselineNeed(sleep, today()).min)})`}
+          onPress={() => setEdit({title: 'Nightly sleep need', label: 'Hours, e.g. 7.5 or 7:45', kind: 'duration', initial: settings.sleepNeedMin ? formatMinutes(settings.sleepNeedMin).replace('h ', ':').replace('m', '') : '', hint: 'Empty estimates it from your longer nights (7–9 hours)', onSave: (v) => updateSettings({sleepNeedMin: v as number | null})})}
+        />
+        <ValueRow
+          title="Wake-up, weekdays"
+          value={settings.wakeWeekday != null ? formatClock(settings.wakeWeekday) : 'Auto (usual)'}
+          onPress={() => setEdit({title: 'Weekday wake-up', label: 'Time, e.g. 6:45', kind: 'time', initial: settings.wakeWeekday != null ? formatClock(settings.wakeWeekday) : '', hint: 'Used to plan your bedtime. Empty uses your usual wake time', onSave: (v) => updateSettings({wakeWeekday: v as number | null})})}
+        />
+        <ValueRow
+          title="Wake-up, weekends"
+          value={settings.wakeWeekend != null ? formatClock(settings.wakeWeekend) : 'Auto (usual)'}
+          onPress={() => setEdit({title: 'Weekend wake-up', label: 'Time, e.g. 8:00', kind: 'time', initial: settings.wakeWeekend != null ? formatClock(settings.wakeWeekend) : '', hint: 'Empty uses your usual weekend wake time', onSave: (v) => updateSettings({wakeWeekend: v as number | null})})}
+        />
+        <ToggleRow
+          title="Move bedtime gradually"
+          subtitle="If your target bedtime is much earlier than usual, step towards it 30 minutes at a time"
+          value={settings.gradualBedtime ?? true}
+          onChange={(v) => updateSettings({gradualBedtime: v})}
+        />
+      </Panel>
+      <Panel>
+        <PanelHeader title="About you" subtitle="Improves training load and max heart rate estimates" icon="account-outline" color={chart.series[6]} />
+        <ValueRow
+          title="Year of birth"
+          value={settings.birthYear ? String(settings.birthYear) : 'Not set'}
+          onPress={() => setEdit({title: 'Year of birth', label: 'Year', kind: 'number', min: 1920, max: new Date().getFullYear() - 10, initial: settings.birthYear ? String(settings.birthYear) : '', hint: 'Used to estimate max heart rate', onSave: (v) => updateSettings({birthYear: v as number | null})})}
+        />
+        <View style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 6}}>
+          <Text variant="bodyLarge" style={{color: chart.inkPrimary, flex: 1}}>Sex</Text>
+          <Menu visible={sexMenu} onDismiss={() => setSexMenu(false)} anchor={<Button compact onPress={() => setSexMenu(true)}>{settings.sex === 'male' ? 'Male' : settings.sex === 'female' ? 'Female' : 'Not set'}</Button>}>
+            {[{v: null, l: 'Not set'}, {v: 'male' as const, l: 'Male'}, {v: 'female' as const, l: 'Female'}].map((o) => (
+              <Menu.Item key={o.l} title={o.l} onPress={() => { setSexMenu(false); updateSettings({sex: o.v}); }} />
+            ))}
+          </Menu>
+        </View>
+        <ValueRow
+          title="Max heart rate"
+          value={settings.maxHr ? `${settings.maxHr} bpm` : `Auto (${report?.load.profile.maxHr ?? '–'} bpm)`}
+          onPress={() => setEdit({title: 'Max heart rate', label: 'bpm', kind: 'number', min: 120, max: 230, initial: settings.maxHr ? String(settings.maxHr) : '', hint: 'From a lab test or a hard all-out effort. Empty estimates it', onSave: (v) => updateSettings({maxHr: v as number | null})})}
+        />
+      </Panel>
+      <Panel>
+        <PanelHeader title="Patterns" icon="chart-scatter-plot" color={chart.series[1]} />
+        <ToggleRow
+          title="Only count days I logged something"
+          subtitle="Off: any day without a tag counts as a day without it. On: only days with a check-in or other tags count, in case you forget to log"
+          value={settings.onlyJournaledDays ?? false}
+          onChange={(v) => updateSettings({onlyJournaledDays: v})}
         />
       </Panel>
 
@@ -286,7 +370,7 @@ export default function SettingsScreen() {
               icon="bell-outline"
               color={chart.series[3]}
             />
-            <ToggleRow title="Morning readiness" subtitle="Your readiness and sleep score shortly after you wake" value={notif.readiness} onChange={(v) => updateNotif({readiness: v})} />
+            <ToggleRow title="Morning report" subtitle="Readiness, what's holding it back and today's training target, shortly after you wake" value={notif.readiness} onChange={(v) => updateNotif({readiness: v})} />
             <Divider />
             <ToggleRow
               title="Evening tag reminder"
@@ -308,7 +392,11 @@ export default function SettingsScreen() {
             <Divider />
             <ToggleRow title="Strain alerts" subtitle="When several signals suggest you're run down or getting sick" value={notif.strain} onChange={(v) => updateNotif({strain: v})} />
             <Divider />
+            <ToggleRow title="Bedtime reminder" subtitle="About an hour before tonight's target bedtime" value={notif.bedtime} onChange={(v) => updateNotif({bedtime: v})} />
+            <Divider />
             <ToggleRow title="Weekly review" subtitle="A summary of last week on Monday morning" value={notif.weekly} onChange={(v) => updateNotif({weekly: v})} />
+            <Divider />
+            <ToggleRow title="Monthly review" subtitle="Your month in review on the 1st" value={notif.monthly} onChange={(v) => updateNotif({monthly: v})} />
             <Divider />
             <ToggleRow title="Sync problems" subtitle="If Garmin signs the app out and data stops syncing" value={notif.syncProblem} onChange={(v) => updateNotif({syncProblem: v})} />
             <Text variant="bodySmall" style={{color: chart.inkMuted, marginTop: 8}}>
@@ -324,6 +412,45 @@ export default function SettingsScreen() {
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
           <Button onPress={restore}>Restore from file</Button>
           <Button mode="contained" onPress={backup}>Back up now</Button>
+        </View>
+      </Panel>
+
+      <Panel>
+        <PanelHeader title="Export" subtitle="Spreadsheet-friendly CSV files" icon="file-delimited-outline" color={chart.series[2]} />
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
+          <Button onPress={() => shareCsv('health-workouts', activitiesCsv(activities)).catch((e) => setDialog({title: 'Export failed', body: String(e)}))}>Workouts</Button>
+          <Button mode="contained" onPress={() => shareCsv('health-daily', dailyCsv(daily, report, allTags, tagEntries, notes)).catch((e) => setDialog({title: 'Export failed', body: String(e)}))}>Daily data</Button>
+        </View>
+      </Panel>
+
+      <SectionHeader title="Ask about your data" />
+      <Panel>
+        <PanelHeader
+          title="Claude"
+          subtitle={ai.hasKey ? 'API key saved on this phone' : 'Add your own Anthropic API key to ask questions about your data'}
+          icon="chat-question-outline"
+          color={chart.series[6]}
+        />
+        <Text variant="bodySmall" style={{color: chart.inkSecondary}}>
+          Each question sends a summary of your recent data to Anthropic&apos;s API, billed to your key. Nothing is sent until you ask.
+        </Text>
+        <View style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 6}}>
+          <Text variant="bodyLarge" style={{color: chart.inkPrimary, flex: 1}}>Model</Text>
+          <Menu visible={modelMenu} onDismiss={() => setModelMenu(false)} anchor={<Button compact onPress={() => setModelMenu(true)}>{AI_MODELS.find((m) => m.id === ai.model)?.label ?? ai.model}</Button>}>
+            {AI_MODELS.map((m) => (
+              <Menu.Item key={m.id} title={`${m.label} · ${m.detail}`} onPress={async () => { setModelMenu(false); await setModel(m.id); refresh(); }} />
+            ))}
+          </Menu>
+        </View>
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
+          {ai.hasKey && <Button onPress={async () => { await setApiKey(null); refresh(); }}>Remove key</Button>}
+          <Button
+            mode={ai.hasKey ? 'text' : 'contained'}
+            onPress={() => setEdit({title: 'Anthropic API key', label: 'sk-ant-…', kind: 'text', secure: true, initial: '', hint: 'Create one at console.anthropic.com', onSave: async (v) => { await setApiKey(v ? String(v) : null); refresh(); }})}
+          >
+            {ai.hasKey ? 'Change key' : 'Add key'}
+          </Button>
+          {ai.hasKey && <Button mode="contained" onPress={() => router.push('/ask')}>Open</Button>}
         </View>
       </Panel>
 
@@ -356,6 +483,7 @@ export default function SettingsScreen() {
         </View>
       </Panel>
 
+      <EditValueDialog spec={edit} onDismiss={() => setEdit(null)} />
       <Portal>
         <Dialog visible={dialog != null} onDismiss={() => setDialog(null)} style={{maxHeight: '85%'}}>
           <Dialog.Title>{dialog?.title}</Dialog.Title>
