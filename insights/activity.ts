@@ -18,7 +18,14 @@ export const WEEKLY_INTENSITY_TARGET = 150;
 export const TRAINING_DAY_MIN = 20;
 export const EASY_DAY_MAX_MIN = 10;
 
-export type ActivityInput = {date: IsoDate; daily: DailyData; stepGoal?: number};
+/** Your fixed goal if set, otherwise the goal Garmin set for that day (it adapts), otherwise 8,000. */
+export function stepGoalFor(daily: DailyData, date: IsoDate, fixed?: number | null): number {
+  if (fixed) return fixed;
+  const garmin = daily.garmin_step_goal?.get(date) ?? daily.garmin_step_goal?.get(addDays(date, -1));
+  return garmin && garmin > 0 ? garmin : DEFAULT_STEP_GOAL;
+}
+
+export type ActivityInput = {date: IsoDate; daily: DailyData; stepGoal?: number | null};
 
 /** Training minutes for each of the last 7 days. Garmin intensity minutes win; Health Connect exercise only fills days Garmin has no value for. */
 function weeklyLoad(daily: DailyData, date: IsoDate): number[] | null {
@@ -36,7 +43,7 @@ function weeklyLoad(daily: DailyData, date: IsoDate): number[] | null {
 
 export function scoreActivity(input: ActivityInput): Score | null {
   const {date, daily} = input;
-  const goal = input.stepGoal ?? DEFAULT_STEP_GOAL;
+  const goal = stepGoalFor(daily, date, input.stepGoal);
   const parts: WeightedContributor[] = [];
 
   const steps = daily.steps?.get(date);

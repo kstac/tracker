@@ -47,14 +47,14 @@ describe('scoreReadiness', () => {
     const data = steadyMonth();
     data.resting_hr = withValue(data.resting_hr!, TODAY, 63);
     const score = scoreReadiness({date: TODAY, daily: data, sleepScore: 90})!;
-    expect(score.contributors[0]).toEqual({key: 'resting_hr', label: 'Resting heart rate', score: 25, detail: '63 bpm (+8 vs usual)'});
+    expect(score.contributors[0]).toEqual({key: 'resting_hr', label: 'Resting heart rate', score: 25, detail: '63 bpm (+8 vs usual)', impact: 13.6});
     expect(score.value).toBeLessThan(97);
   });
 
   it('uses real HRV when it is available', () => {
     const data = {...steadyMonth(), hrv_overnight: steady(TODAY, 60, 45, 3)};
     const hrv = scoreReadiness({date: TODAY, daily: data, sleepScore: 90})!.contributors.find((c) => c.key === 'hrv_balance');
-    expect(hrv).toEqual({key: 'hrv_balance', label: 'HRV balance', score: 100, detail: '45 ms recently vs 45 ms usual'});
+    expect(hrv).toEqual({key: 'hrv_balance', label: 'HRV balance', score: 100, detail: '45 ms recently vs 45 ms usual', impact: 0});
   });
 
   it('is calibrating and skips baseline contributors with only a few days of data', () => {

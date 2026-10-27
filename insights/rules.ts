@@ -1,53 +1,44 @@
 import {addDays, daysBetween, formatClock, formatMinutes, IsoDate, isWeekend} from '@/lib/dates';
 import {DailyData, MetricId} from '@/metrics/types';
 import {Insight} from '@/insights/types';
-import {deviation, windowPoints, windowValues} from '@/insights/baseline';
+import {windowPoints, windowValues} from '@/insights/baseline';
+import {computeRadar, RadarContext} from '@/insights/vitals';
+import {LoadReport} from '@/insights/load';
+import {Effect} from '@/insights/effects';
+import {StatusKind} from '@/metrics/types';
 import {mean, median, round, sd, slope} from '@/insights/stats';
 
-export type RuleInput = {today: IsoDate; daily: DailyData};
+export type RuleInput = {
+  today: IsoDate;
+  daily: DailyData;
+  radar?: RadarContext;
+  load?: LoadReport | null;
+  effects?: Effect[];
+  /** Strain alerts are expected while sick, so they're softened. */
+  status?: StatusKind | null;
+};
 
 type Rule = (input: RuleInput) => Insight | null;
 
-export const STRAIN_Z = 1.5;
+const joinList = (items: string[]) =>
+  items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
-type StrainSignal = {metric: MetricId; label: string; badDirection: 1 | -1; unit: string; dateOffset: number};
-
-const STRAIN_SIGNALS: StrainSignal[] = [
-  {metric: 'resting_hr', label: 'resting heart rate', badDirection: 1, unit: ' bpm', dateOffset: 0},
-  {metric: 'respiration_sleep', label: 'sleep respiration', badDirection: 1, unit: ' brpm', dateOffset: 0},
-  {metric: 'sleep_stress', label: 'overnight stress', badDirection: 1, unit: '', dateOffset: 0},
-  {metric: 'stress_avg', label: 'daytime stress', badDirection: 1, unit: '', dateOffset: -1},
-  {metric: 'spo2_low', label: 'lowest Pulse Ox', badDirection: -1, unit: '%', dateOffset: 0},
-];
-
-function badZ(daily: DailyData, signal: StrainSignal, date: IsoDate): {z: number; diff: number} | null {
-  const dev = deviation(daily, signal.metric, date);
-  if (!dev || !dev.ready) return null;
-  return {z: dev.z * signal.badDirection, diff: dev.diff};
-}
-
-export const strainRadar: Rule = ({today, daily}) => {
-  const hits: string[] = [];
-  for (const base of STRAIN_SIGNALS) {
-    const signal =
-      base.metric === 'respiration_sleep' && !daily.respiration_sleep ? {...base, metric: 'respiration_avg' as MetricId, label: 'respiration'} : base;
-    const date = addDays(today, signal.dateOffset);
-    const now = badZ(daily, signal, date);
-    const before = badZ(daily, signal, addDays(date, -1));
-    if (!now) continue;
-    const twoDay = before ? (now.z + before.z) / 2 : null;
-    if (now.z >= STRAIN_Z || (twoDay != null && twoDay >= STRAIN_Z)) {
-      const amount = round(Math.abs(now.diff), signal.unit === ' brpm' ? 1 : 0);
-      hits.push(`${signal.label} is ${amount}${signal.unit} ${now.diff > 0 ? 'above' : 'below'} your usual`);
-    }
+export const strainRadar: Rule = ({today, daily, radar: ctx, status}) => {
+  const radar = computeRadar(daily, today, ctx);
+  if (radar.level === 'none') return null;
+  const list = joinList(radar.hits.map((h) => h.text));
+  const sentence = `${list[0].toUpperCase()}${list.slice(1)}.`;
+  if (status === 'sick') {
+    return {id: 'strain_radar', kind: 'info', title: 'Your body is still fighting', body: `${sentence} That's expected while you're unwell. Rest up.`, priority: 90, metric: 'resting_hr'};
   }
-  if (hits.length < 2) return null;
-  const list = hits.length === 2 ? hits.join(' and ') : `${hits.slice(0, -1).join(', ')} and ${hits[hits.length - 1]}`;
+  if (radar.explanation) {
+    return {id: 'strain_radar', kind: 'info', title: 'Signs of strain', body: `${sentence} ${radar.explanation}`, priority: 70, metric: 'resting_hr'};
+  }
   return {
     id: 'strain_radar',
     kind: 'warning',
-    title: 'Your body may be under strain',
-    body: `${list[0].toUpperCase()}${list.slice(1)}. Several signals moving together like this often comes before illness, or follows hard training or poor recovery. Consider taking it easy today.`,
+    title: radar.level === 'major' ? 'Strong signs your body is under strain' : 'Your body may be under strain',
+    body: `${sentence} Several signals moving together like this often comes before illness, or follows hard training or poor recovery. Consider taking it easy today.`,
     priority: 100,
     metric: 'resting_hr',
   };
@@ -234,6 +225,77 @@ export const sleepConsistencyImproved: Rule = ({today, daily}) => {
   };
 };
 
+export const loadSpike: Rule = ({load}) => {
+  if (!load || (load.status !== 'overreaching' && load.status !== 'high') || load.acute == null || load.chronic == null) return null;
+  const pct = Math.round((load.acute / load.chronic - 1) * 100);
+  const over = load.status === 'overreaching';
+  return {
+    id: 'load_spike',
+    kind: over ? 'warning' : 'info',
+    title: over ? 'Training load is spiking' : 'A big training week',
+    body: `Your daily training load over the last week is ${pct}% above your 4-week average. ${over ? 'Jumps this large are linked to injury and illness, so add an easy day or two.' : 'That is fine for a short block, but plan some easier days soon.'}`,
+    priority: over ? 80 : 45,
+  };
+};
+
+export const detraining: Rule = ({load}) => {
+  if (!load || load.status !== 'detraining') return null;
+  return {
+    id: 'detraining',
+    kind: 'info',
+    title: 'Your fitness is starting to slip',
+    body: 'Training load has been well below your usual for a few weeks. A couple of moderate sessions a week is enough to hold on to fitness.',
+    priority: 35,
+  };
+};
+
+export const stressHighWeek: Rule = ({today, daily}) => {
+  const week = windowValues(daily.stress_avg, today, 7);
+  const prior = windowValues(daily.stress_avg, addDays(today, -7), 60);
+  if (week.length < 5 || prior.length < 21) return null;
+  const now = mean(week)!;
+  const before = mean(prior)!;
+  const spread = sd(prior)!;
+  if (spread === 0 || (now - before) / spread < 0.8 || now - before < 4) return null;
+  return {
+    id: 'stress_high_week',
+    kind: 'warning',
+    title: 'A more stressful week',
+    body: `Your average stress this week is ${Math.round(now)}, up from your usual ${Math.round(before)}. Stress makes Body Battery drain faster, so protect your sleep and add some down time.`,
+    priority: 55,
+    metric: 'stress_avg',
+  };
+};
+
+export const weightTrend: Rule = ({today, daily}) => {
+  const points = windowPoints(daily.weight_kg, today, 60);
+  if (points.length < 6 || daysBetween(points[0].date, points.at(-1)!.date) < 21) return null;
+  const s = slope(points.map((p) => ({x: daysBetween(today, p.date), y: p.value})));
+  if (s == null) return null;
+  const change = s * daysBetween(points[0].date, points.at(-1)!.date);
+  if (Math.abs(change) < 1.5) return null;
+  return {
+    id: 'weight_trend',
+    kind: 'info',
+    title: `Weight is trending ${change > 0 ? 'up' : 'down'}`,
+    body: `Your weight has ${change > 0 ? 'risen' : 'fallen'} by about ${round(Math.abs(change), 1)} kg over the last ${Math.round(daysBetween(points[0].date, points.at(-1)!.date) / 7)} weeks, now ${round(points.at(-1)!.value, 1)} kg.`,
+    priority: 30,
+    metric: 'weight_kg',
+  };
+};
+
+export const topEffect: Rule = ({effects}) => {
+  const best = (effects ?? []).find((e) => e.confidence === 'strong' && e.factorKind === 'tag');
+  if (!best) return null;
+  return {
+    id: 'top_effect',
+    kind: best.good === false ? 'warning' : best.good ? 'positive' : 'info',
+    title: `${best.factorName} and ${best.targetLabel.toLowerCase()}`,
+    body: `${best.summary} This is one of your clearest patterns. See the Insights tab for more.`,
+    priority: 33,
+  };
+};
+
 export const RULES: Rule[] = [
   strainRadar,
   shortSleepStreak,
@@ -246,6 +308,11 @@ export const RULES: Rule[] = [
   bodyBatteryLow,
   restingHrLow,
   sleepConsistencyImproved,
+  loadSpike,
+  detraining,
+  stressHighWeek,
+  weightTrend,
+  topEffect,
 ];
 
 export function generateInsights(input: RuleInput): Insight[] {

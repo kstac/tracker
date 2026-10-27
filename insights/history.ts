@@ -1,12 +1,15 @@
 import {dateRange, IsoDate} from '@/lib/dates';
-import {computeSleepScores} from '@/insights/index';
+import {computeSleepScores} from '@/insights/sleepScores';
 import {scoreActivity} from '@/insights/activity';
 import {scoreReadiness} from '@/insights/readiness';
 import {InsightInput, Score} from '@/insights/types';
+import {baselineNeed} from '@/insights/sleepPlan';
 
 export type ScoreKind = 'readiness' | 'sleep' | 'activity';
 
 export type ScorePoint = {value: number; calibrating: boolean};
+
+export const HISTORY_DAYS = 365;
 
 export type ScoreHistoryDay = {
   date: IsoDate;
@@ -32,7 +35,7 @@ export function computeScoreHistory(input: InsightInput, from: IsoDate, to: IsoD
     else if (kind === 'activity') score = scoreActivity({date, daily: input.daily, stepGoal: input.settings?.stepGoal});
     else {
       const sleepValue = sleepScores.get(date)?.value ?? input.daily.garmin_sleep_score?.get(date) ?? null;
-      score = scoreReadiness({date, daily: input.daily, sleepScore: sleepValue, sleepNeedMin: input.settings?.sleepNeedMin});
+      score = scoreReadiness({date, daily: input.daily, sleepScore: sleepValue, sleepNeedMin: baselineNeed(input.sleep, date, input.settings).min});
     }
     cache.set(key, score);
     return score;

@@ -48,7 +48,7 @@ describe('strainRadar', () => {
     expect(insight).toEqual({
       id: 'strain_radar',
       kind: 'warning',
-      title: 'Your body may be under strain',
+      title: 'Strong signs your body is under strain',
       body: 'Resting heart rate is 7 bpm above your usual and overnight stress is 10 above your usual. Several signals moving together like this often comes before illness, or follows hard training or poor recovery. Consider taking it easy today.',
       priority: 100,
       metric: 'resting_hr',

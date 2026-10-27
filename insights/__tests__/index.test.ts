@@ -1,6 +1,6 @@
 import {describe, expect, it} from '@jest/globals';
 import {addDays} from '@/lib/dates';
-import {computeInsights, mainNights} from '@/insights';
+import {computeInsights, mainNights, topEffects} from '@/insights';
 import {daily, night, steady, TODAY} from '@/insights/__fixtures__/series';
 
 describe('computeInsights', () => {
@@ -25,7 +25,7 @@ describe('computeInsights', () => {
       activity: report.activity?.value,
       nights: report.sleepScores.size,
       insights: report.insights,
-      tagEffects: report.tagEffects,
+      effects: topEffects(report.effects.effects),
     }).toEqual({
       date: TODAY,
       sleep: 99,
@@ -34,7 +34,7 @@ describe('computeInsights', () => {
       activity: 100,
       nights: 30,
       insights: [],
-      tagEffects: [],
+      effects: [],
     });
   });
 

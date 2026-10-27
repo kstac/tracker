@@ -15,15 +15,64 @@ export function today(): IsoDate {
   return toIsoDate(new Date());
 }
 
+// Calendar arithmetic on day numbers (days since 1970-01-01) instead of Date objects: the insights engine does this
+// millions of times, and building Dates for each step made a full recompute take seconds on a phone.
+const dayNumberCache = new Map<IsoDate, number>();
+
+function daysFromCivil(y: number, m: number, d: number): number {
+  const yy = m <= 2 ? y - 1 : y;
+  const era = Math.floor(yy / 400);
+  const yoe = yy - era * 400;
+  const doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1;
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
+  return era * 146097 + doe - 719468;
+}
+
+const civilCache = new Map<number, IsoDate>();
+
+function civilFromDays(n: number): IsoDate {
+  const cached = civilCache.get(n);
+  if (cached) return cached;
+  const iso = computeCivil(n);
+  if (civilCache.size > 20_000) civilCache.clear();
+  civilCache.set(n, iso);
+  return iso;
+}
+
+function computeCivil(n: number): IsoDate {
+  const z = n + 719468;
+  const era = Math.floor(z / 146097);
+  const doe = z - era * 146097;
+  const yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365);
+  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100));
+  const mp = Math.floor((5 * doy + 2) / 153);
+  const d = doy - Math.floor((153 * mp + 2) / 5) + 1;
+  const m = mp < 10 ? mp + 3 : mp - 9;
+  const y = yoe + era * 400 + (m <= 2 ? 1 : 0);
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+
+export function dayNumber(date: IsoDate): number {
+  let n = dayNumberCache.get(date);
+  if (n == null) {
+    const [y, m, d] = date.split('-').map(Number);
+    n = daysFromCivil(y, m, d);
+    if (dayNumberCache.size > 20_000) dayNumberCache.clear();
+    dayNumberCache.set(date, n);
+  }
+  return n;
+}
+
+export function fromDayNumber(n: number): IsoDate {
+  return civilFromDays(n);
+}
+
 export function addDays(date: IsoDate, days: number): IsoDate {
-  const d = parseIsoDate(date);
-  d.setDate(d.getDate() + days);
-  return toIsoDate(d);
+  return days === 0 ? date : civilFromDays(dayNumber(date) + days);
 }
 
 export function daysBetween(from: IsoDate, to: IsoDate): number {
-  const ms = parseIsoDate(to).getTime() - parseIsoDate(from).getTime();
-  return Math.round(ms / 86_400_000);
+  return dayNumber(to) - dayNumber(from);
 }
 
 export function dateRange(from: IsoDate, to: IsoDate): IsoDate[] {
@@ -33,7 +82,8 @@ export function dateRange(from: IsoDate, to: IsoDate): IsoDate[] {
 }
 
 export function dayOfWeek(date: IsoDate): number {
-  return parseIsoDate(date).getDay();
+  // 1970-01-01 was a Thursday.
+  return (((dayNumber(date) + 4) % 7) + 7) % 7;
 }
 
 export function isWeekend(date: IsoDate): boolean {
@@ -46,8 +96,10 @@ export function startOfDayTs(date: IsoDate): number {
 }
 
 // Minutes since local midnight of `date`; times before midnight are negative (e.g. 23:00 the evening before = -60).
+// Uses the local wall clock, so a night that crosses a daylight-saving change still reads 23:00 → 07:00.
 export function minutesFromMidnight(ts: number, date: IsoDate): number {
-  return Math.round((ts - startOfDayTs(date)) / 60_000);
+  const d = new Date(ts);
+  return daysBetween(date, toIsoDate(d)) * 1440 + d.getHours() * 60 + d.getMinutes() + Math.round(d.getSeconds() / 60);
 }
 
 // The old tracker keyed values by toLocaleDateString() on an en-AU device (D/M/YYYY), but the raw JSON was hand-editable.

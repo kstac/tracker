@@ -10,12 +10,12 @@ describe('scoreSleep', () => {
       calibrating: false,
       date: TODAY,
       contributors: [
-        {key: 'total', label: 'Total sleep', score: 100, detail: '8h 00m'},
-        {key: 'efficiency', label: 'Efficiency', score: 100, detail: '97%'},
-        {key: 'restfulness', label: 'Restfulness', score: 90, detail: '15m awake'},
-        {key: 'rem', label: 'REM sleep', score: 100, detail: '1h 45m'},
-        {key: 'deep', label: 'Deep sleep', score: 100, detail: '1h 30m (19%)'},
-        {key: 'timing', label: 'Timing', score: 100, detail: 'Midpoint 03:08'},
+        {key: 'total', label: 'Total sleep', score: 100, detail: '8h 00m', impact: 0},
+        {key: 'efficiency', label: 'Efficiency', score: 100, detail: '97%', impact: 0},
+        {key: 'restfulness', label: 'Restfulness', score: 90, detail: '15m awake', impact: 1},
+        {key: 'rem', label: 'REM sleep', score: 100, detail: '1h 45m', impact: 0},
+        {key: 'deep', label: 'Deep sleep', score: 100, detail: '1h 30m (19%)', impact: 0},
+        {key: 'timing', label: 'Timing', score: 100, detail: 'Midpoint 03:08', impact: 0},
       ],
     });
   });
@@ -27,7 +27,7 @@ describe('scoreSleep', () => {
 
   it('uses the reported efficiency when given', () => {
     const score = scoreSleep(night(TODAY), {efficiency: 77.5})!;
-    expect(score.contributors.find((c) => c.key === 'efficiency')).toEqual({key: 'efficiency', label: 'Efficiency', score: 50, detail: '78%'});
+    expect(score.contributors.find((c) => c.key === 'efficiency')).toEqual({key: 'efficiency', label: 'Efficiency', score: 50, detail: '78%', impact: 7.5});
   });
 
   it('skips stage contributors when the night has no stages', () => {

@@ -3,7 +3,7 @@ import {DailyData, MetricId} from '@/metrics/types';
 import {Score} from '@/insights/types';
 import {computeBaseline, deviation, LONG_WINDOW_DAYS, MIN_BASELINE_POINTS, recentWeightedMean, windowValues} from '@/insights/baseline';
 import {mean, ramp, round, sd} from '@/insights/stats';
-import {combine, WeightedContributor} from '@/insights/score';
+import {combine, readinessAction, WeightedContributor} from '@/insights/score';
 
 export const READINESS_WEIGHTS = {
   restingHr: 0.2,
@@ -15,6 +15,7 @@ export const READINESS_WEIGHTS = {
   bodyBattery: 0.1,
   hrvBalance: 0.1,
   previousDayStress: 0.1,
+  feel: 0.1,
 };
 
 export const DEFAULT_SLEEP_NEED_MIN = 480;
@@ -186,7 +187,23 @@ export function scoreReadiness(input: ReadinessInput): Score | null {
     });
   }
 
+  const energy = daily.checkin_energy?.get(date);
+  const soreness = daily.checkin_soreness?.get(date);
+  if (energy != null || soreness != null) {
+    const ratings = [energy, soreness == null ? null : 6 - soreness].filter((v): v is number => v != null);
+    const avg = mean(ratings)!;
+    const words = [energy != null ? `energy ${energy}/5` : null, soreness != null ? `soreness ${soreness}/5` : null].filter(Boolean).join(', ');
+    parts.push({
+      key: 'feel',
+      label: 'How you feel',
+      weight: READINESS_WEIGHTS.feel,
+      score: ramp(avg, 1, 5, 20, 100),
+      detail: `Morning check-in: ${words}`,
+    });
+  }
+
   const calibrationSeries = daily.resting_hr ?? daily.sleep_total_min;
   const calibrating = !computeBaseline(calibrationSeries, addDays(date, -1)).ready;
-  return combine(parts, date, calibrating);
+  const score = combine(parts, date, calibrating);
+  return score ? {...score, action: readinessAction(score.value)} : null;
 }
