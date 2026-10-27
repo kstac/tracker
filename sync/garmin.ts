@@ -1,9 +1,11 @@
-import {kvGet, kvSet, upsertDaily, upsertSamples, upsertSleep} from '@/db/repo';
-import {GarminClient} from '@/garmin/client';
+import {deleteActivities, kvGet, kvSet, replaceBodyBatteryEvents, upsertActivities, upsertDaily, upsertSamples, upsertSleep} from '@/db/repo';
+import {GarminClient, GarminRateLimitError} from '@/garmin/client';
 import {
   averageHeartRate,
   bodyBatteryAt,
   mapHeartRateSamples,
+  mapActivities,
+  mapBodyBatteryEvents,
   mapHrv,
   mapMaxMetrics,
   mapSleep,
@@ -11,7 +13,7 @@ import {
   mapUserSummary,
 } from '@/garmin/mappers';
 import {addDays, daysBetween, IsoDate, today} from '@/lib/dates';
-import {DailyRow} from '@/metrics/types';
+import {Activity, DailyRow} from '@/metrics/types';
 import {sleepDerivedRows} from '@/sync/sleep';
 
 const KV = {
@@ -19,6 +21,7 @@ const KV = {
   oldestSynced: 'garmin.oldest_synced',
   hrvSupport: 'garmin.hrv_support',
   backfillDone: 'garmin.backfill_done',
+  activitiesSynced: 'garmin.activities_synced',
 };
 
 const BACKFILL_DAYS = 365;
@@ -66,11 +69,36 @@ async function syncDay(client: GarminClient, name: string, date: IsoDate, withSa
       const wake = bodyBatteryAt(stress, sleep.night.endTs);
       if (wake != null) rows.push({date, metric: 'body_battery_wake', source: 'garmin', value: wake});
     }
+    await syncBodyBatteryEvents(client, date);
   }
 
   await upsertDaily(rows);
   const hasData = !!sleep.night || rows.some((r) => r.metric === 'steps' && r.value > 0);
   return {hrvFound, hasData};
+}
+
+/** Not every account or watch has events; a failure here shouldn't stop the day's sync. */
+async function syncBodyBatteryEvents(client: GarminClient, date: IsoDate) {
+  try {
+    const events = mapBodyBatteryEvents(date, await client.get(`/wellness-service/wellness/bodyBattery/events/${date}`));
+    await replaceBodyBatteryEvents(date, events);
+  } catch (e) {
+    if (e instanceof GarminRateLimitError) throw e;
+  }
+}
+
+const ACTIVITY_PAGE = 100;
+
+/** Replaces the range in one go, so workouts deleted in Garmin Connect disappear here too. */
+async function syncActivities(client: GarminClient, from: IsoDate, to: IsoDate) {
+  const all: Activity[] = [];
+  for (let start = 0; start < 2000; start += ACTIVITY_PAGE) {
+    const page = await client.get(`/activitylist-service/activities/search/activities`, {startDate: from, endDate: to, start, limit: ACTIVITY_PAGE});
+    all.push(...mapActivities(page));
+    if (!Array.isArray(page) || page.length < ACTIVITY_PAGE) break;
+  }
+  await deleteActivities('garmin', from, addDays(to, 1));
+  await upsertActivities(all);
 }
 
 async function syncVo2Max(client: GarminClient, from: IsoDate, to: IsoDate) {
@@ -140,6 +168,8 @@ export async function syncGarmin(client: GarminClient, onProgress?: (p: GarminPr
 
   const vo2From = all.length ? all[all.length - 1] : end;
   await syncVo2Max(client, vo2From, end);
+  await syncActivities(client, (await kvGet(KV.activitiesSynced)) ? [addDays(end, -7), vo2From].sort()[0] : addDays(end, -BACKFILL_DAYS), end);
+  await kvSet(KV.activitiesSynced, end);
   onProgress?.({done: all.length, total: all.length, date: end});
   return {days: all.length, backfillRemaining: stoppedEarly || cursor < target ? 0 : daysBetween(target, cursor) + 1};
 }
@@ -149,4 +179,5 @@ export async function resetGarminSyncState() {
   await kvSet(KV.displayName, '');
   await kvSet(KV.hrvSupport, '');
   await kvSet(KV.backfillDone, '');
+  await kvSet(KV.activitiesSynced, '');
 }

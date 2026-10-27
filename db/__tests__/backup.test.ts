@@ -16,6 +16,12 @@ describe('backup', () => {
     expect(backupSummary(b)).toBe('1 tags, 2 tag entries, 3 daily values, 0 nights of sleep');
   });
 
+  it('accepts older backups without the newer tables and remembers which were missing', () => {
+    const b = validateBackup({app: 'tracker', version: 1, exportedAt: '2026-10-10T00:00:00Z', tables: empty});
+    expect(b.missing).toEqual(['activities', 'body_battery_events', 'notes', 'status_periods', 'experiments']);
+    expect(b.tables.activities).toEqual([]);
+  });
+
   it('drops device-specific sync state from kv on restore', () => {
     expect(
       restorableRows('kv', [

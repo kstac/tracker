@@ -53,4 +53,62 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE tags ADD COLUMN unit TEXT;
   ALTER TABLE tags ADD COLUMN weekly_limit REAL;
   `,
+  `
+  ALTER TABLE tag_entries ADD COLUMN time_min INTEGER;
+
+  CREATE TABLE activities (
+    id TEXT PRIMARY KEY NOT NULL,
+    source TEXT NOT NULL,
+    date TEXT NOT NULL,
+    start_ts INTEGER NOT NULL,
+    duration_min REAL NOT NULL,
+    type TEXT NOT NULL,
+    name TEXT,
+    avg_hr REAL,
+    max_hr REAL,
+    kcal REAL,
+    distance_km REAL,
+    aerobic_te REAL,
+    anaerobic_te REAL,
+    garmin_load REAL,
+    zone_min TEXT
+  );
+  CREATE INDEX idx_activities_date ON activities (date);
+
+  CREATE TABLE body_battery_events (
+    date TEXT NOT NULL,
+    start_ts INTEGER NOT NULL,
+    duration_min REAL NOT NULL,
+    type TEXT NOT NULL,
+    impact REAL NOT NULL,
+    feedback TEXT,
+    PRIMARY KEY (date, start_ts, type)
+  );
+
+  CREATE TABLE notes (
+    date TEXT PRIMARY KEY NOT NULL,
+    text TEXT NOT NULL
+  );
+
+  CREATE TABLE status_periods (
+    id TEXT PRIMARY KEY NOT NULL,
+    kind TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT,
+    note TEXT
+  );
+
+  CREATE TABLE experiments (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    tag_id TEXT,
+    mode TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    days INTEGER NOT NULL,
+    prediction TEXT,
+    metrics TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    ended_at TEXT
+  );
+  `,
 ];

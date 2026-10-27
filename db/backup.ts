@@ -4,11 +4,18 @@ import * as Sharing from 'expo-sharing';
 import {getDb} from '@/db';
 import {today} from '@/lib/dates';
 
-export const BACKUP_TABLES = ['daily_metrics', 'samples', 'sleep_sessions', 'tags', 'tag_entries', 'kv'] as const;
+export const BACKUP_TABLES = [
+  'daily_metrics', 'samples', 'sleep_sessions', 'tags', 'tag_entries', 'kv',
+  'activities', 'body_battery_events', 'notes', 'status_periods', 'experiments',
+] as const;
 type Table = (typeof BACKUP_TABLES)[number];
+
+/** Tables added after the first backup format; older files simply don't have them. */
+const OPTIONAL_TABLES: Table[] = ['activities', 'body_battery_events', 'notes', 'status_periods', 'experiments'];
 type Row = Record<string, string | number | null>;
 
-export type Backup = {app: 'tracker'; version: 1; exportedAt: string; tables: Record<Table, Row[]>};
+/** `missing` lists tables the file didn't contain (older backups); restoring leaves those tables alone. */
+export type Backup = {app: 'tracker'; version: 1; exportedAt: string; tables: Record<Table, Row[]>; missing?: Table[]};
 
 /** Sync cursors are device-specific; restoring them would make a new phone skip data it hasn't fetched. */
 const DEVICE_KV_PREFIXES = ['hc.', 'garmin.', 'sync.'];
@@ -18,10 +25,14 @@ export function validateBackup(raw: unknown): Backup {
   if (!b || b.app !== 'tracker' || b.version !== 1 || typeof b.tables !== 'object' || !b.tables) {
     throw new Error('This file is not a Health Tracker backup');
   }
+  const missing: Table[] = [];
   for (const t of BACKUP_TABLES) {
-    if (!Array.isArray(b.tables[t])) throw new Error(`Backup is missing the ${t} table`);
+    if (Array.isArray(b.tables[t])) continue;
+    if (!OPTIONAL_TABLES.includes(t)) throw new Error(`Backup is missing the ${t} table`);
+    b.tables[t] = [];
+    missing.push(t);
   }
-  return b as Backup;
+  return {...(b as Backup), missing};
 }
 
 export function restorableRows(table: Table, rows: Row[]): Row[] {
@@ -31,7 +42,8 @@ export function restorableRows(table: Table, rows: Row[]): Row[] {
 
 export function backupSummary(b: Backup): string {
   const n = (t: Table) => b.tables[t].length.toLocaleString();
-  return `${n('tags')} tags, ${n('tag_entries')} tag entries, ${n('daily_metrics')} daily values, ${n('sleep_sessions')} nights of sleep`;
+  const extra = b.tables.activities.length ? `, ${n('activities')} workouts` : '';
+  return `${n('tags')} tags, ${n('tag_entries')} tag entries, ${n('daily_metrics')} daily values, ${n('sleep_sessions')} nights of sleep${extra}`;
 }
 
 export async function exportBackup(): Promise<string> {
@@ -66,6 +78,7 @@ export async function restoreBackup(backup: Backup) {
   const db = await getDb();
   await db.withExclusiveTransactionAsync(async (txn) => {
     for (const t of [...BACKUP_TABLES].reverse()) {
+      if (backup.missing?.includes(t)) continue;
       if (t === 'kv') {
         const prefixes = DEVICE_KV_PREFIXES.map((p) => `key NOT LIKE '${p}%'`).join(' AND ');
         await txn.runAsync(`DELETE FROM kv WHERE ${prefixes}`);

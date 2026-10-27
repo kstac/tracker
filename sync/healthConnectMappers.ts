@@ -1,5 +1,5 @@
 import {IsoDate, toIsoDate} from '@/lib/dates';
-import {DailyRow, MetricId, Sample, SleepNight} from '@/metrics/types';
+import {Activity, DailyRow, MetricId, Sample, SleepNight} from '@/metrics/types';
 
 // Mirrors react-native-health-connect's SleepStageType so this module stays importable in jest.
 const STAGE = {AWAKE: 1, SLEEPING: 2, OUT_OF_BED: 3, LIGHT: 4, DEEP: 5, REM: 6} as const;
@@ -73,7 +73,8 @@ export type HcExerciseSession = {
   startTime: string;
   endTime: string;
   exerciseType?: number;
-  metadata?: {dataOrigin?: string; recordingMethod?: number};
+  title?: string;
+  metadata?: {id?: string; dataOrigin?: string; recordingMethod?: number};
 };
 
 const AUTOMATICALLY_RECORDED = 2;
@@ -108,4 +109,43 @@ export function exerciseMinutesByDay(sessions: HcExerciseSession[]): DailyRow[] 
     rows.push({date, metric: 'exercise_min', source: 'health_connect', value: total / 60_000});
   }
   return rows.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// Mirrors react-native-health-connect's ExerciseType codes for the common activities.
+const HC_EXERCISE_TYPES: Record<number, string> = {
+  8: 'cycling', 9: 'indoor_cycling', 10: 'hiit', 11: 'boxing', 16: 'dancing', 25: 'elliptical', 26: 'cardio',
+  33: 'breathwork', 36: 'hiit', 37: 'hiking', 44: 'martial_arts', 48: 'pilates', 51: 'rock_climbing', 53: 'rowing',
+  54: 'indoor_rowing', 56: 'running', 57: 'treadmill_running', 64: 'soccer', 66: 'squash', 68: 'stair_climbing',
+  70: 'strength_training', 71: 'stretching', 73: 'swimming', 74: 'swimming', 76: 'tennis', 79: 'walking', 83: 'yoga',
+};
+
+/** Deliberate workouts from other apps, so their load counts too. Heart rate comes from the samples when available. */
+export function mapExerciseActivities(sessions: HcExerciseSession[], hr: Sample[] = []): Activity[] {
+  const out: Activity[] = [];
+  for (const s of sessions) {
+    if (s.metadata?.recordingMethod === AUTOMATICALLY_RECORDED) continue;
+    const start = Date.parse(s.startTime);
+    const end = Date.parse(s.endTime);
+    if (!(end > start)) continue;
+    const inSession = hr.filter((h) => h.ts >= start && h.ts <= end);
+    const avg = inSession.length >= 5 ? inSession.reduce((a, h) => a + h.value, 0) / inSession.length : null;
+    out.push({
+      id: `hc:${s.metadata?.id ?? s.startTime}`,
+      source: 'health_connect',
+      date: toIsoDate(new Date(start)),
+      startTs: start,
+      durationMin: (end - start) / 60_000,
+      type: HC_EXERCISE_TYPES[s.exerciseType ?? -1] ?? 'other',
+      name: s.title || null,
+      avgHr: avg == null ? null : Math.round(avg),
+      maxHr: inSession.length ? Math.max(...inSession.map((h) => h.value)) : null,
+      kcal: null,
+      distanceKm: null,
+      aerobicTe: null,
+      anaerobicTe: null,
+      garminLoad: null,
+      zoneMin: null,
+    });
+  }
+  return out;
 }

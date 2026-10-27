@@ -1,6 +1,6 @@
 import {IsoDate} from '@/lib/dates';
 
-export type Source = 'garmin' | 'health_connect' | 'import';
+export type Source = 'garmin' | 'health_connect' | 'import' | 'manual';
 
 export type MetricId =
   | 'steps'
@@ -41,7 +41,20 @@ export type MetricId =
   | 'spo2_avg'
   | 'spo2_low'
   | 'vo2max'
-  | 'weight_kg';
+  | 'weight_kg'
+  | 'body_fat_pct'
+  | 'bp_systolic'
+  | 'bp_diastolic'
+  | 'stress_rest_min'
+  | 'stress_low_min'
+  | 'stress_medium_min'
+  | 'stress_high_min'
+  | 'sedentary_min'
+  | 'active_min'
+  | 'garmin_step_goal'
+  | 'checkin_energy'
+  | 'checkin_mood'
+  | 'checkin_soreness';
 
 export type DailyRow = {date: IsoDate; metric: MetricId; source: Source; value: number};
 
@@ -65,8 +78,56 @@ export type SampleMetric = 'heart_rate' | 'stress' | 'body_battery';
 export type Sample = {metric: SampleMetric; ts: number; value: number; source: Source};
 
 /** `unit` null means a simple count (+1 per tap); otherwise entries are amounts in that unit, e.g. mg. */
-export type Tag = {id: string; name: string; createdAt: number; unit: string | null; weeklyLimit: number | null};
+export type Tag = {id: string; name: string; createdAt: number; unit: string | null; weeklyLimit: number | null; archived?: boolean};
 
 export type TagUpdate = {name: string; unit: string | null; weeklyLimit: number | null};
 
-export type TagEntry = {tagId: string; date: IsoDate; value: number};
+/** `timeMin` is when it was last logged, in minutes after midnight, if it was logged on the day itself. */
+export type TagEntry = {tagId: string; date: IsoDate; value: number; timeMin?: number | null};
+
+export type Activity = {
+  id: string;
+  source: Source;
+  /** Local date the activity started. */
+  date: IsoDate;
+  startTs: number;
+  durationMin: number;
+  type: string;
+  name: string | null;
+  avgHr: number | null;
+  maxHr: number | null;
+  kcal: number | null;
+  distanceKm: number | null;
+  aerobicTe: number | null;
+  anaerobicTe: number | null;
+  garminLoad: number | null;
+  /** Minutes in heart rate zones 1–5, when the source reports them. */
+  zoneMin: number[] | null;
+};
+
+export type BodyBatteryEvent = {date: IsoDate; startTs: number; durationMin: number; type: string; impact: number; feedback: string | null};
+
+export type StatusKind = 'sick' | 'travel' | 'injured' | 'rest';
+
+/** A stretch of days that shouldn't count as normal, e.g. illness. `end` null means still ongoing. */
+export type StatusPeriod = {id: string; kind: StatusKind; start: IsoDate; end: IsoDate | null; note: string | null};
+
+export type DayNote = {date: IsoDate; text: string};
+
+export type ExperimentMode = 'avoid' | 'do';
+
+export type Prediction = 'better' | 'same' | 'worse';
+
+export type Experiment = {
+  id: string;
+  name: string;
+  tagId: string | null;
+  mode: ExperimentMode;
+  start: IsoDate;
+  days: number;
+  prediction: Prediction | null;
+  /** Outcome keys from EXPERIMENT_METRICS, the first is the main one. */
+  metrics: string[];
+  createdAt: number;
+  endedAt: IsoDate | null;
+};

@@ -9,11 +9,11 @@ import {
   SdkAvailabilityStatus,
 } from 'react-native-health-connect';
 import type {AggregateResultRecordType, AggregationGroupResult, RecordType} from 'react-native-health-connect';
-import {deleteDaily, upsertDaily, upsertSamples, upsertSleep} from '@/db/repo';
+import {deleteActivities, deleteDaily, upsertActivities, upsertDaily, upsertSamples, upsertSleep} from '@/db/repo';
 import {addDays, IsoDate, parseIsoDate, toIsoDate} from '@/lib/dates';
 import {DailyRow, MetricId} from '@/metrics/types';
 import {sleepDerivedRows} from '@/sync/sleep';
-import {dailyAverages, exerciseMinutesByDay, mapHeartRateRecords, mapSleepSessions} from '@/sync/healthConnectMappers';
+import {dailyAverages, exerciseMinutesByDay, mapExerciseActivities, mapHeartRateRecords, mapSleepSessions} from '@/sync/healthConnectMappers';
 
 const READ_TYPES: RecordType[] = [
   'Steps', 'Distance', 'ActiveCaloriesBurned', 'TotalCaloriesBurned', 'HeartRate', 'RestingHeartRate',
@@ -174,7 +174,13 @@ export async function syncHealthConnect(from: IsoDate, toExclusive: IsoDate): Pr
 
   const hrFrom = [from, addDays(toExclusive, -HR_SAMPLE_DAYS)].sort()[1];
   const hr = await settle('HR samples', readAll('HeartRate', hrFrom, toExclusive), errors);
-  if (hr) await upsertSamples(mapHeartRateRecords(hr));
+  const hrSamples = hr ? mapHeartRateRecords(hr) : [];
+  if (hr) await upsertSamples(hrSamples);
+
+  if (exercise) {
+    await deleteActivities('health_connect', from, toExclusive);
+    await upsertActivities(mapExerciseActivities(exercise, hrSamples));
+  }
 
   await upsertDaily(rows);
   return {rows: rows.length, errors};

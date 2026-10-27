@@ -24,6 +24,7 @@ const categoryColors = (s: string[]): Record<MetricCategory, string> => ({
   sleep: s[6],
   recovery: s[2],
   body: s[0],
+  feel: s[4],
 });
 
 const STATUS = {good: '#0ca30c', warning: '#fab219', serious: '#ec835a', critical: '#d03b3b'};

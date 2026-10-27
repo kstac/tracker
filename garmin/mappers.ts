@@ -1,5 +1,5 @@
 import {IsoDate, toIsoDate} from '@/lib/dates';
-import {DailyRow, MetricId, Sample, SleepNight} from '@/metrics/types';
+import {Activity, BodyBatteryEvent, DailyRow, MetricId, Sample, SleepNight} from '@/metrics/types';
 
 type Json = Record<string, any>;
 
@@ -27,6 +27,11 @@ export function mapUserSummary(date: IsoDate, s: Json | null | undefined): Daily
   const vigorous = num(s.vigorousIntensityMinutes);
   const intensity = moderate == null && vigorous == null ? null : (moderate ?? 0) + 2 * (vigorous ?? 0);
   const distance = num(s.totalDistanceMeters);
+  const minutes = (v: unknown) => {
+    const n = num(v);
+    return n == null ? null : n / 60;
+  };
+  const active = num(s.activeSeconds) == null && num(s.highlyActiveSeconds) == null ? null : ((num(s.activeSeconds) ?? 0) + (num(s.highlyActiveSeconds) ?? 0)) / 60;
   return rowsFrom(date, [
     ['steps', s.totalSteps],
     ['distance_km', distance == null ? null : distance / 1000],
@@ -47,6 +52,13 @@ export function mapUserSummary(date: IsoDate, s: Json | null | undefined): Daily
     ['spo2_avg', positive(s.averageSpo2)],
     ['spo2_low', positive(s.lowestSpo2)],
     ['respiration_avg', positive(s.avgWakingRespirationValue)],
+    ['stress_rest_min', minutes(s.restStressDuration)],
+    ['stress_low_min', minutes(s.lowStressDuration)],
+    ['stress_medium_min', minutes(s.mediumStressDuration)],
+    ['stress_high_min', minutes(s.highStressDuration)],
+    ['sedentary_min', minutes(s.sedentarySeconds)],
+    ['active_min', active],
+    ['garmin_step_goal', positive(s.dailyStepGoal)],
   ]);
 }
 
@@ -135,4 +147,81 @@ export function bodyBatteryAt(samples: Sample[], ts: number): number | null {
 
 export function calendarDateOf(ts: number): IsoDate {
   return toIsoDate(new Date(ts));
+}
+
+const TYPE_ALIASES: Record<string, string> = {
+  lap_swimming: 'swimming',
+  open_water_swimming: 'swimming',
+  street_running: 'running',
+  track_running: 'running',
+  virtual_ride: 'indoor_cycling',
+  road_biking: 'cycling',
+  mountain_biking: 'cycling',
+  gravel_cycling: 'cycling',
+  casual_walking: 'walking',
+  speed_walking: 'walking',
+  indoor_walking: 'walking',
+  indoor_cardio: 'cardio',
+};
+
+export function normaliseActivityType(key: unknown): string {
+  const k = typeof key === 'string' && key ? key.toLowerCase() : 'other';
+  return TYPE_ALIASES[k] ?? k;
+}
+
+/** Garmin's GMT timestamps come as "2026-10-10 07:30:00" or ISO strings without a zone. */
+export function parseGarminGmt(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v !== 'string' || !v) return null;
+  // Hermes only reliably parses three-digit fractions, and Garmin sends one ("…:00.0").
+  const iso = (v.includes('T') ? v : v.replace(' ', 'T')).replace(/\.(\d{1,3})\d*/, (_, f: string) => `.${f.padEnd(3, '0')}`);
+  const ts = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
+  return Number.isNaN(ts) ? null : ts;
+}
+
+export function mapActivities(data: unknown): Activity[] {
+  if (!Array.isArray(data)) return [];
+  const out: Activity[] = [];
+  for (const a of data) {
+    const id = a?.activityId;
+    const startTs = parseGarminGmt(a?.startTimeGMT);
+    const duration = num(a?.duration);
+    if (id == null || startTs == null || duration == null || duration <= 0) continue;
+    const local = typeof a.startTimeLocal === 'string' ? a.startTimeLocal.slice(0, 10) : calendarDateOf(startTs);
+    const zones = [1, 2, 3, 4, 5].map((z) => num(a[`hrTimeInZone_${z}`]));
+    const distance = num(a.distance);
+    out.push({
+      id: `garmin:${id}`,
+      source: 'garmin',
+      date: local,
+      startTs,
+      durationMin: duration / 60,
+      type: normaliseActivityType(a.activityType?.typeKey),
+      name: typeof a.activityName === 'string' ? a.activityName : null,
+      avgHr: positive(a.averageHR),
+      maxHr: positive(a.maxHR),
+      kcal: positive(a.calories),
+      distanceKm: distance != null && distance > 0 ? distance / 1000 : null,
+      aerobicTe: positive(a.aerobicTrainingEffect),
+      anaerobicTe: positive(a.anaerobicTrainingEffect),
+      garminLoad: positive(a.activityTrainingLoad),
+      zoneMin: zones.some((z) => z != null) ? zones.map((z) => Math.round(((z ?? 0) / 60) * 10) / 10) : null,
+    });
+  }
+  return out;
+}
+
+export function mapBodyBatteryEvents(date: IsoDate, data: unknown): BodyBatteryEvent[] {
+  if (!Array.isArray(data)) return [];
+  const out: BodyBatteryEvent[] = [];
+  for (const item of data) {
+    const e = item?.event ?? item;
+    const startTs = parseGarminGmt(e?.eventStartTimeGmt);
+    const impact = num(e?.bodyBatteryImpact);
+    if (startTs == null || impact == null) continue;
+    const type = typeof e.eventType === 'string' ? e.eventType.toLowerCase() : 'other';
+    const feedback = typeof e.shortFeedback === 'string' ? e.shortFeedback : typeof item?.activityName === 'string' ? item.activityName : null;
+    out.push({date, startTs, durationMin: (num(e.durationInMilliseconds) ?? 0) / 60_000, type, impact, feedback});
+  }
+  return out;
 }
