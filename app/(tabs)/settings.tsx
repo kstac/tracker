@@ -5,7 +5,7 @@ import {Button, Dialog, Divider, Menu, Portal, SegmentedButtons, Switch, Text} f
 import {Panel, PanelHeader, SectionHeader} from '@/components/ui/Panel';
 import EditValueDialog, {EditSpec} from '@/components/settings/EditValueDialog';
 import ChangelogPanel from '@/components/settings/ChangelogPanel';
-import {AI_MODELS, getApiKey, getModel, setApiKey, setModel} from '@/lib/ai';
+import {AI_MODELS, AI_PROVIDERS, AiProvider, getApiKey, getModel, getProvider, modelsFor, setApiKey, setModel, setProvider} from '@/lib/ai';
 import {activitiesCsv, dailyCsv, shareCsv} from '@/lib/exportCsv';
 import {baselineNeed} from '@/insights';
 import {backupSummary, exportBackup, pickBackup, restoreBackup} from '@/db/backup';
@@ -95,7 +95,7 @@ export default function SettingsScreen() {
   const {preference, setPreference} = useThemePreference();
   const {sync, syncing, lastSync, reload, daily, sleep, settings, updateSettings, report, allTags, tagEntries, notes, activities} = useAppData();
   const [edit, setEdit] = useState<EditSpec | null>(null);
-  const [ai, setAi] = useState<{hasKey: boolean; model: string}>({hasKey: false, model: AI_MODELS[0].id});
+  const [ai, setAi] = useState<{provider: AiProvider; hasKey: boolean; model: string}>({provider: 'anthropic', hasKey: false, model: AI_MODELS[0].id});
   const [modelMenu, setModelMenu] = useState(false);
   const [sexMenu, setSexMenu] = useState(false);
   const [hc, setHc] = useState<HealthConnectStatus | null>(null);
@@ -114,7 +114,8 @@ export default function SettingsScreen() {
     setGarmin({connected: !!tokens, name: await kvGet('garmin.display_name'), hrv: await kvGet('garmin.hrv_support')});
     setNotif(await getPrefs());
     setNotifAllowed(await permissionGranted());
-    setAi({hasKey: !!(await getApiKey()), model: await getModel()});
+    const provider = await getProvider();
+    setAi({provider, hasKey: !!(await getApiKey(provider)), model: await getModel(provider)});
   }, []);
 
   const updateNotif = async (patch: Partial<NotificationPrefs>) => {
@@ -426,27 +427,37 @@ export default function SettingsScreen() {
       <SectionHeader title="Ask about your data" />
       <Panel>
         <PanelHeader
-          title="Claude"
-          subtitle={ai.hasKey ? 'API key saved on this phone' : 'Add your own Anthropic API key to ask questions about your data'}
+          title={AI_PROVIDERS[ai.provider].label}
+          subtitle={ai.hasKey ? 'API key saved on this phone' : `Add your own ${AI_PROVIDERS[ai.provider].company} API key to ask questions about your data`}
           icon="chat-question-outline"
           color={chart.series[6]}
         />
+        <SegmentedButtons
+          value={ai.provider}
+          onValueChange={async (v) => { await setProvider(v as AiProvider); refresh(); }}
+          buttons={(Object.keys(AI_PROVIDERS) as AiProvider[]).map((p) => ({value: p, label: AI_PROVIDERS[p].label}))}
+          style={{marginBottom: 10}}
+        />
         <Text variant="bodySmall" style={{color: chart.inkSecondary}}>
-          Each question sends a summary of your recent data to Anthropic&apos;s API, billed to your key. Nothing is sent until you ask.
+          Each question sends a summary of your recent data to {AI_PROVIDERS[ai.provider].company}&apos;s API, billed to your key. Nothing is sent until you ask.
         </Text>
         <View style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 6}}>
           <Text variant="bodyLarge" style={{color: chart.inkPrimary, flex: 1}}>Model</Text>
           <Menu visible={modelMenu} onDismiss={() => setModelMenu(false)} anchor={<Button compact onPress={() => setModelMenu(true)}>{AI_MODELS.find((m) => m.id === ai.model)?.label ?? ai.model}</Button>}>
-            {AI_MODELS.map((m) => (
-              <Menu.Item key={m.id} title={`${m.label} · ${m.detail}`} onPress={async () => { setModelMenu(false); await setModel(m.id); refresh(); }} />
+            {modelsFor(ai.provider).map((m) => (
+              <Menu.Item key={m.id} title={`${m.label} · ${m.detail}`} onPress={async () => { setModelMenu(false); await setModel(ai.provider, m.id); refresh(); }} />
             ))}
           </Menu>
         </View>
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
-          {ai.hasKey && <Button onPress={async () => { await setApiKey(null); refresh(); }}>Remove key</Button>}
+          {ai.hasKey && <Button onPress={async () => { await setApiKey(ai.provider, null); refresh(); }}>Remove key</Button>}
           <Button
             mode={ai.hasKey ? 'text' : 'contained'}
-            onPress={() => setEdit({title: 'Anthropic API key', label: 'sk-ant-…', kind: 'text', secure: true, initial: '', hint: 'Create one at console.anthropic.com', onSave: async (v) => { await setApiKey(v ? String(v) : null); refresh(); }})}
+            onPress={() => {
+              const {provider} = ai;
+              const p = AI_PROVIDERS[provider];
+              setEdit({title: `${p.company} API key`, label: p.keyLabel, kind: 'text', secure: true, initial: '', hint: p.keyHint, onSave: async (v) => { await setApiKey(provider, v ? String(v) : null); refresh(); }});
+            }}
           >
             {ai.hasKey ? 'Change key' : 'Add key'}
           </Button>

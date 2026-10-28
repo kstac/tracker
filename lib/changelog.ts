@@ -2,12 +2,22 @@
  * The app's own version, bumped (minor) with each set of changes. It's kept here rather than in app.json because
  * app.json's version feeds the native fingerprint, and changing it would stop OTA updates reaching existing builds.
  */
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 export type ChangelogEntry = {version: string; date: string; title: string; test: string[]};
 
 /** Newest first. Each item is something to check on the phone. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date: '2026-10-28',
+    title: 'Chat with Gemini',
+    test: [
+      'Settings: switch Ask about your data between Claude and Gemini; each keeps its own key and model',
+      'Add a Gemini key from aistudio.google.com and ask a question; check the answer quotes your numbers',
+      'Switch back to Claude and check your Claude key and model are still there',
+    ],
+  },
   {
     version: '1.1.0',
     date: '2026-10-28',

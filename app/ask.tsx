@@ -3,7 +3,7 @@ import {KeyboardAvoidingView, Platform, ScrollView, View} from 'react-native';
 import {router} from 'expo-router';
 import {ActivityIndicator, Button, Chip, IconButton, Text, TextInput} from 'react-native-paper';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
-import {askClaude, buildContext, ChatMessage, getApiKey} from '@/lib/ai';
+import {AI_MODELS, AI_PROVIDERS, AiProvider, askAi, buildContext, ChatMessage, getApiKey, getModel, getProvider} from '@/lib/ai';
 import {today} from '@/lib/dates';
 import {useAppData} from '@/providers/AppData';
 import {useAppTheme} from '@/theme';
@@ -20,6 +20,7 @@ export default function AskScreen() {
   const {chart, colors} = useAppTheme();
   const {report, daily, tags, tagEntries} = useAppData();
   const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [setup, setSetup] = useState<{provider: AiProvider; model: string} | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -27,7 +28,11 @@ export default function AskScreen() {
   const scroll = useRef<ScrollView>(null);
 
   useEffect(() => {
-    getApiKey().then((k) => setHasKey(!!k));
+    (async () => {
+      const provider = await getProvider();
+      setSetup({provider, model: await getModel(provider)});
+      setHasKey(!!(await getApiKey(provider)));
+    })();
   }, []);
 
   const send = async (question: string) => {
@@ -39,7 +44,7 @@ export default function AskScreen() {
     setBusy(true);
     setError(null);
     try {
-      const answer = await askClaude(next, buildContext({report, daily, tags, tagEntries, today: today()}));
+      const answer = await askAi(next, buildContext({report, daily, tags, tagEntries, today: today()}));
       setMessages([...next, {role: 'assistant', content: answer}]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -52,12 +57,13 @@ export default function AskScreen() {
   };
 
   if (hasKey === false) {
+    const p = AI_PROVIDERS[setup?.provider ?? 'anthropic'];
     return (
       <ScrollView style={{backgroundColor: chart.page}} contentContainerStyle={{paddingTop: 12}}>
         <Panel>
-          <PanelHeader title="Ask about your data" subtitle="Uses Claude with your own Anthropic API key" icon="chat-question-outline" color={colors.primary} />
+          <PanelHeader title="Ask about your data" subtitle={`Uses ${p.label} with your own ${p.company} API key`} icon="chat-question-outline" color={colors.primary} />
           <Text variant="bodyMedium" style={{color: chart.inkSecondary, marginBottom: 12}}>
-            Add an API key in Settings to ask questions in plain language. Each question sends a summary of your recent data (scores, sleep, training, tags and patterns) to Anthropic to answer it.
+            Add an API key in Settings to ask questions in plain language. Each question sends a summary of your recent data (scores, sleep, training, tags and patterns) to {p.company} to answer it.
           </Text>
           <Button mode="contained" style={{alignSelf: 'flex-start'}} onPress={() => router.push('/settings')}>Open settings</Button>
         </Panel>
@@ -70,7 +76,7 @@ export default function AskScreen() {
       <ScrollView ref={scroll} contentContainerStyle={{paddingTop: 12, paddingBottom: 16}} keyboardShouldPersistTaps="handled">
         {messages.length === 0 && (
           <Panel>
-            <PanelHeader title="Ask about your data" subtitle="Answers use only the numbers the app has computed" icon="chat-question-outline" color={colors.primary} />
+            <PanelHeader title="Ask about your data" subtitle={`${AI_MODELS.find((m) => m.id === setup?.model)?.label ?? 'AI'} · answers use only the numbers the app has computed`} icon="chat-question-outline" color={colors.primary} />
             <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
               {STARTERS.map((s) => <Chip key={s} disabled={!report} onPress={() => send(s)}>{s}</Chip>)}
             </View>

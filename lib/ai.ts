@@ -6,34 +6,63 @@ import {weekStart} from '@/insights/tagStats';
 import {addDays, formatClock, formatMinutes, IsoDate} from '@/lib/dates';
 import {DailyData, MetricId, Tag, TagEntry} from '@/metrics/types';
 
-const KEY_STORE = 'anthropic_api_key';
-const MODEL_KEY = 'ai.model';
+export type AiProvider = 'anthropic' | 'gemini';
 
-export const AI_MODELS = [
-  {id: 'claude-opus-5-5', label: 'Claude Opus 5.5', detail: 'Most capable'},
-  {id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', detail: 'Faster, cheaper'},
-  {id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', detail: 'Fastest'},
+export const AI_PROVIDERS: Record<AiProvider, {label: string; company: string; keyLabel: string; keyHint: string}> = {
+  anthropic: {label: 'Claude', company: 'Anthropic', keyLabel: 'sk-ant-…', keyHint: 'Create one at console.anthropic.com'},
+  gemini: {
+    label: 'Gemini',
+    company: 'Google',
+    keyLabel: 'AIza…',
+    keyHint: 'Create one at aistudio.google.com. On the free tier Google may use what you send to improve its products.',
+  },
+};
+
+export const AI_MODELS: {id: string; provider: AiProvider; label: string; detail: string}[] = [
+  {id: 'claude-opus-5-5', provider: 'anthropic', label: 'Claude Opus 5.5', detail: 'Most capable'},
+  {id: 'claude-sonnet-5-5', provider: 'anthropic', label: 'Claude Sonnet 5.5', detail: 'Faster, cheaper'},
+  {id: 'claude-haiku-5-5', provider: 'anthropic', label: 'Claude Haiku 5.5', detail: 'Fastest'},
+  {id: 'gemini-pro-latest', provider: 'gemini', label: 'Gemini Pro', detail: 'Most capable'},
+  {id: 'gemini-flash-latest', provider: 'gemini', label: 'Gemini Flash', detail: 'Faster, cheaper'},
+  {id: 'gemini-flash-lite-latest', provider: 'gemini', label: 'Gemini Flash-Lite', detail: 'Fastest'},
 ];
 
-export async function getApiKey(): Promise<string | null> {
+const KEY_STORE: Record<AiProvider, string> = {anthropic: 'anthropic_api_key', gemini: 'gemini_api_key'};
+const PROVIDER_KEY = 'ai.provider';
+const MODEL_KEY: Record<AiProvider, string> = {anthropic: 'ai.model', gemini: 'ai.model.gemini'};
+
+export function modelsFor(provider: AiProvider) {
+  return AI_MODELS.filter((m) => m.provider === provider);
+}
+
+export async function getProvider(): Promise<AiProvider> {
+  return (await kvGet(PROVIDER_KEY)) === 'gemini' ? 'gemini' : 'anthropic';
+}
+
+export async function setProvider(provider: AiProvider) {
+  await kvSet(PROVIDER_KEY, provider);
+}
+
+export async function getApiKey(provider: AiProvider): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(KEY_STORE);
+    return await SecureStore.getItemAsync(KEY_STORE[provider]);
   } catch {
     return null;
   }
 }
 
-export async function setApiKey(key: string | null) {
-  if (key) await SecureStore.setItemAsync(KEY_STORE, key.trim());
-  else await SecureStore.deleteItemAsync(KEY_STORE);
+export async function setApiKey(provider: AiProvider, key: string | null) {
+  if (key) await SecureStore.setItemAsync(KEY_STORE[provider], key.trim());
+  else await SecureStore.deleteItemAsync(KEY_STORE[provider]);
 }
 
-export async function getModel(): Promise<string> {
-  return (await kvGet(MODEL_KEY)) || AI_MODELS[0].id;
+export async function getModel(provider: AiProvider): Promise<string> {
+  const saved = await kvGet(MODEL_KEY[provider]);
+  return saved && AI_MODELS.some((m) => m.id === saved && m.provider === provider) ? saved : modelsFor(provider)[0].id;
 }
 
-export async function setModel(model: string) {
-  await kvSet(MODEL_KEY, model);
+export async function setModel(provider: AiProvider, model: string) {
+  await kvSet(MODEL_KEY[provider], model);
 }
 
 const WEEKLY_METRICS: MetricId[] = [
@@ -153,17 +182,52 @@ Correlations are not causation; say how confident a pattern is. Be concise, warm
 
 export type ChatMessage = {role: 'user' | 'assistant'; content: string};
 
-export async function askClaude(messages: ChatMessage[], context: string): Promise<string> {
-  const key = await getApiKey();
-  if (!key) throw new Error('Add your Anthropic API key in Settings first.');
-  const model = await getModel();
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
+type ChatRequest = {url: string; headers: Record<string, string>; body: unknown};
+
+export function buildChatRequest(provider: AiProvider, model: string, key: string, messages: ChatMessage[], context: string): ChatRequest {
+  const system = `${SYSTEM}\n\n<data>\n${context}\n</data>`;
+  if (provider === 'gemini') {
+    return {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      headers: {'content-type': 'application/json', 'x-goog-api-key': key},
+      body: {
+        systemInstruction: {parts: [{text: system}]},
+        contents: messages.map((m) => ({role: m.role === 'assistant' ? 'model' : 'user', parts: [{text: m.content}]})),
+      },
+    };
+  }
+  return {
+    url: 'https://api.anthropic.com/v1/messages',
     headers: {'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01'},
-    body: JSON.stringify({model, max_tokens: 1200, system: `${SYSTEM}\n\n<data>\n${context}\n</data>`, messages}),
-  });
+    body: {model, max_tokens: 1200, system, messages},
+  };
+}
+
+type AnthropicResponse = {content?: {type: string; text?: string}[]};
+type GeminiResponse = {
+  candidates?: {content?: {parts?: {text?: string; thought?: boolean}[]}; finishReason?: string}[];
+  promptFeedback?: {blockReason?: string};
+};
+
+export function parseChatResponse(provider: AiProvider, body: unknown): string {
+  if (provider === 'gemini') {
+    const res = body as GeminiResponse | null;
+    const blocked = res?.promptFeedback?.blockReason;
+    if (blocked) throw new Error(`Gemini declined to answer (${blocked}).`);
+    const parts = res?.candidates?.[0]?.content?.parts ?? [];
+    return parts.filter((p) => !p.thought && p.text).map((p) => p.text).join('').trim();
+  }
+  const res = body as AnthropicResponse | null;
+  return (res?.content ?? []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+}
+
+export async function askAi(messages: ChatMessage[], context: string): Promise<string> {
+  const provider = await getProvider();
+  const key = await getApiKey(provider);
+  if (!key) throw new Error(`Add your ${AI_PROVIDERS[provider].company} API key in Settings first.`);
+  const req = buildChatRequest(provider, await getModel(provider), key, messages, context);
+  const res = await fetch(req.url, {method: 'POST', headers: req.headers, body: JSON.stringify(req.body)});
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error(body?.error?.message ?? `Request failed (HTTP ${res.status})`);
-  const text = (body?.content ?? []).filter((c: {type: string}) => c.type === 'text').map((c: {text: string}) => c.text).join('\n').trim();
-  return text || 'No answer came back.';
+  return parseChatResponse(provider, body) || 'No answer came back.';
 }
