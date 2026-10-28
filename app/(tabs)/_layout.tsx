@@ -29,7 +29,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{title: 'Today', headerShown: false, tabBarIcon: icon('white-balance-sunny')}} />
       <Tabs.Screen name="trends" options={{title: 'Trends', tabBarIcon: icon('chart-line')}} />
       <Tabs.Screen name="insights" options={{title: 'Insights', tabBarIcon: icon('lightbulb-on-outline')}} />
-      <Tabs.Screen name="tags" options={{title: 'Journal', tabBarIcon: icon('notebook-outline')}} />
       <Tabs.Screen name="settings" options={{title: 'Settings', tabBarIcon: icon('cog-outline')}} />
     </Tabs>
   );

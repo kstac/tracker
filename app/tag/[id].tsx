@@ -1,11 +1,13 @@
 import {useMemo, useState} from 'react';
 import {Alert, ScrollView, View} from 'react-native';
 import {router, Stack, useLocalSearchParams} from 'expo-router';
-import {Button, DataTable, SegmentedButtons, Text} from 'react-native-paper';
+import {Button, SegmentedButtons, Text} from 'react-native-paper';
 import TagEditDialog from '@/components/TagEditDialog';
 import LimitBar, {limitColor} from '@/components/tags/LimitBar';
 import TagTotalsChart, {rangeStart} from '@/components/tags/TagTotalsChart';
+import TagCalendar from '@/components/tags/TagCalendar';
 import TrendBadge from '@/components/tags/TrendBadge';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
 import {EffectList} from '@/components/effects/EffectList';
 import {computeTagStats, formatTagAmount, monthlyTotals, weeklyTotals} from '@/insights/tagStats';
@@ -13,7 +15,6 @@ import {parseIsoDate, today} from '@/lib/dates';
 import {useAppData} from '@/providers/AppData';
 import {useAppTheme} from '@/theme';
 
-const PAGE = 30;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 type Range = '3m' | '1y' | 'all';
 
@@ -35,7 +36,6 @@ export default function TagScreen() {
   const {chart} = useAppTheme();
   const {allTags: tags, tagEntries, report, updateTag, deleteTag, setTagArchived} = useAppData();
   const [editing, setEditing] = useState(false);
-  const [shown, setShown] = useState(PAGE);
   const [range, setRange] = useState<Range>('1y');
   const end = today();
   const tagIndex = tags.findIndex((t) => t.id === id);
@@ -59,8 +59,7 @@ export default function TagScreen() {
   const progress = report?.effects.progress.find((p) => p.factorId === id) ?? null;
   const overlaps = (report?.effects.overlaps ?? []).filter((o) => o.a === id || o.b === id);
   const amount = (v: number) => formatTagAmount(Math.round(v * 10) / 10, tag.unit);
-  const fmtDate = (d: string, weekday = false) =>
-    parseIsoDate(d).toLocaleDateString(undefined, {weekday: weekday ? 'short' : undefined, day: 'numeric', month: 'short', year: 'numeric'});
+  const fmtDate = (d: string) => parseIsoDate(d).toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'});
   const fraction = stats.thisWeek.fraction;
   const maxWeekday = Math.max(...stats.weekdayAverages, 0.0001);
 
@@ -102,10 +101,9 @@ export default function TagScreen() {
           <Stat label="Days without" value={days(stats.currentStreakWithout)} sub={stats.longestStreakWithout != null ? `Longest ${days(stats.longestStreakWithout)}` : undefined} />
           <Stat label="Weekly average" value={amount(stats.fourWeekAvg)} sub={stats.previousFourWeekAvg != null ? `Prior 4 weeks ${amount(stats.previousFourWeekAvg)}` : 'Last 4 weeks'} />
         </View>
-        <View style={{flexDirection: 'row'}}>
-          <Stat label="Days logged" value={String(stats.daysLogged)} sub={`Total ${amount(stats.total)}`} />
-          <Stat label="First logged" value={stats.firstDate ? fmtDate(stats.firstDate) : '–'} />
-        </View>
+        <Text variant="labelSmall" style={{color: chart.inkMuted}}>
+          {stats.daysLogged} days logged · {amount(stats.total)} in total{stats.firstDate ? ` · since ${fmtDate(stats.firstDate)}` : ''}
+        </Text>
       </Panel>
 
       <Panel>
@@ -125,8 +123,14 @@ export default function TagScreen() {
       </Panel>
 
       {stats.daysLogged > 0 && (
-        <Panel>
-          <PanelHeader title="By day of week" subtitle="Average per day since you started logging" icon="calendar-week" color={color} />
+        <CollapsiblePanel
+          id="tag.weekday"
+          title="By day of week"
+          subtitle="Average per day since you started logging"
+          summary={`Most on ${WEEKDAYS[stats.weekdayAverages.indexOf(maxWeekday)] ?? '–'}`}
+          icon="calendar-week"
+          color={color}
+        >
           <View style={{gap: 8}}>
             {WEEKDAYS.map((d, i) => (
               <View key={d} style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
@@ -138,7 +142,7 @@ export default function TagScreen() {
               </View>
             ))}
           </View>
-        </Panel>
+        </CollapsiblePanel>
       )}
 
       <Panel>
@@ -151,23 +155,9 @@ export default function TagScreen() {
         ))}
       </Panel>
 
-      <Panel padded={false}>
-        <Text variant="titleMedium" style={{color: chart.inkPrimary, fontWeight: '600', padding: 16, paddingBottom: 4}}>
-          History · {entries.length} days
-        </Text>
-        <DataTable>
-          {entries.slice(0, shown).map((e) => (
-            <DataTable.Row key={e.date}>
-              <DataTable.Cell>{fmtDate(e.date, true)}</DataTable.Cell>
-              <DataTable.Cell numeric>{amount(e.value)}</DataTable.Cell>
-            </DataTable.Row>
-          ))}
-        </DataTable>
-        {entries.length > shown && (
-          <Button onPress={() => setShown(shown + PAGE * 3)} style={{margin: 8}}>
-            Show older ({entries.length - shown} more)
-          </Button>
-        )}
+      <Panel>
+        <PanelHeader title={`History · ${entries.length} days`} icon="calendar-month-outline" color={color} />
+        <TagCalendar entries={entries} end={end} firstDate={stats.firstDate} color={color} />
       </Panel>
 
       <View style={{flexDirection: 'row', gap: 8, marginHorizontal: 16}}>

@@ -1,6 +1,6 @@
 import {View} from 'react-native';
 import {Text} from 'react-native-paper';
-import {Panel, PanelHeader} from '@/components/ui/Panel';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
 import {DEBT_LEVEL_LABEL, SleepPlan} from '@/insights';
 import {formatClock, formatMinutes, parseIsoDate} from '@/lib/dates';
 import {useAppTheme} from '@/theme';
@@ -23,19 +23,20 @@ export default function SleepPlanPanel({plan}: {plan: SleepPlan}) {
   const target = plan.stepBedtime ?? plan.bedtime;
   const weekday = parseIsoDate(plan.wakeDate).toLocaleDateString(undefined, {weekday: 'long'});
   return (
-    <Panel>
-      <PanelHeader
-        title="Tonight"
-        subtitle={`To wake at ${formatClock(plan.wakeTarget)} on ${weekday}${plan.wakeSource === 'usual' ? ' (your usual)' : ''}`}
-        icon="bed-clock"
-        color={chart.category.sleep}
-        right={
-          <View style={{alignItems: 'flex-end'}}>
-            <Text variant="labelSmall" style={{color: chart.inkMuted}}>Asleep by</Text>
-            <Text variant="headlineSmall" style={{color: chart.inkPrimary, fontWeight: '700'}}>{formatClock(target)}</Text>
-          </View>
-        }
-      />
+    <CollapsiblePanel
+      id="today.tonight"
+      title="Tonight"
+      subtitle={`To wake at ${formatClock(plan.wakeTarget)} on ${weekday}${plan.wakeSource === 'usual' ? ' (your usual)' : ''}`}
+      summary={`${formatMinutes(need.tonightMin)} of sleep to wake at ${formatClock(plan.wakeTarget)}`}
+      icon="bed-clock"
+      color={chart.category.sleep}
+      right={
+        <View style={{alignItems: 'flex-end'}}>
+          <Text variant="labelSmall" style={{color: chart.inkMuted}}>Asleep by</Text>
+          <Text variant="headlineSmall" style={{color: chart.inkPrimary, fontWeight: '700'}}>{formatClock(target)}</Text>
+        </View>
+      }
+    >
       {plan.stepBedtime != null && (
         <Text variant="bodySmall" style={{color: chart.inkSecondary, marginBottom: 8}}>
           Your full target is {formatClock(plan.bedtime)}, but that&apos;s a big jump from your usual {plan.usualBedtime != null ? formatClock(plan.usualBedtime) : ''}. Moving 30 minutes at a time is easier to keep.
@@ -50,6 +51,6 @@ export default function SleepPlanPanel({plan}: {plan: SleepPlan}) {
         <View style={{height: 1, backgroundColor: chart.grid, marginVertical: 4}} />
         <Row label="Sleep to aim for tonight" value={formatMinutes(need.tonightMin)} />
       </View>
-    </Panel>
+    </CollapsiblePanel>
   );
 }

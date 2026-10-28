@@ -60,7 +60,7 @@ export default function ScoreRing({value, label, title, size = 96, calibrating, 
         </View>
       </View>
       <Text variant={big ? 'titleMedium' : 'labelLarge'} style={{marginTop: 8, color: chart.inkPrimary, fontWeight: '600'}}>{title}</Text>
-      {!big && (
+      {!big && (calibrating || caption !== '') && (
         <Text variant="labelSmall" style={{color: calibrating ? chart.inkMuted : chart.inkSecondary}}>
           {calibrating ? 'Calibrating' : caption ?? label ?? 'No data'}
         </Text>

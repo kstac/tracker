@@ -10,6 +10,7 @@ import {formatTagAmount} from '@/insights/tagStats';
 import ScoreDetails from '@/components/ScoreDetails';
 import ScoreRing from '@/components/ScoreRing';
 import SyncStatus from '@/components/SyncStatus';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
 import {Panel, PanelHeader, SectionHeader} from '@/components/ui/Panel';
 import {ACTION_TEXT, computeBedtimeShift, Score, topDrags} from '@/insights';
 import {median} from '@/insights/stats';
@@ -97,8 +98,8 @@ export default function TodayScreen() {
 
   const lastNight = [...sleep].reverse().find((n) => n.date <= date);
   const hasAnyData = Object.keys(daily).length > 0;
-  const insights = report?.insights ?? [];
-  const visibleInsights = showAllInsights ? insights : insights.slice(0, 3);
+  const insights = (report?.insights ?? []).filter((i) => i.id !== 'strain_radar');
+  const visibleInsights = showAllInsights ? insights : insights.slice(0, 1);
 
   const scores: Record<ScoreKey, Score | null> = {
     readiness: report?.readiness ?? null,
@@ -168,13 +169,13 @@ export default function TodayScreen() {
           <View style={{gap: 16}}>
             {(['sleep', 'activity'] as ScoreKey[]).map((key) => (
               <Pressable key={key} onPress={() => toggle(key)}>
-                <ScoreRing title={SCORE_META[key].title} value={scores[key]?.value ?? null} label={scores[key]?.label} calibrating={scores[key]?.calibrating} size={78} />
+                <ScoreRing title={SCORE_META[key].title} value={scores[key]?.value ?? null} label={scores[key]?.label} caption="" calibrating={scores[key]?.calibrating} size={78} />
               </Pressable>
             ))}
           </View>
         </View>
         {scores.readiness && <ReadinessSummary score={scores.readiness} />}
-        <Text variant="labelSmall" style={{color: chart.inkMuted, textAlign: 'center', marginBottom: 4}}>Tap a score to see what&apos;s driving it</Text>
+        <Text variant="labelSmall" style={{color: chart.inkMuted, textAlign: 'center', marginBottom: 4}}>Tap a score for details</Text>
       </LinearGradient>
 
       {open && openScore && (
@@ -201,55 +202,9 @@ export default function TodayScreen() {
         <YesterdayPrompt date={date} reason={promptReason} tags={tags} tagEntries={tagEntries} onLog={logTag} />
       )}
 
-      {report && <BodyCheckPanel check={report.bodyCheck} />}
-
-      {(lastNight || plan) && <SectionHeader title="Sleep" />}
-      {lastNight && (
-        <Panel onPress={() => router.push({pathname: '/metric/[id]', params: {id: 'sleep_total_min'}})}>
-          <PanelHeader
-            title={lastNight.date === date ? 'Last night' : nightLabel(lastNight.date)}
-            subtitle={`${formatClock(minutesFromMidnight(lastNight.startTs, lastNight.date))} → ${formatClock(minutesFromMidnight(lastNight.endTs, lastNight.date))}` +
-              (bedtime && lastNight.date >= date ? ` · bed ${shiftText(bedtime.lastDelta)}` : '') +
-              (garminScore != null ? ` · Garmin score ${Math.round(garminScore)}` : '')}
-            icon="weather-night"
-            color={chart.category.sleep}
-            right={
-              <Text variant="headlineSmall" style={{color: chart.inkPrimary, fontWeight: '700'}}>
-                {formatMinutes(lastNight.deepMin + lastNight.lightMin + lastNight.remMin)}
-              </Text>
-            }
-          />
-          <StageBar night={lastNight} />
-        </Panel>
-      )}
-      {plan && lastNight && <SleepPlanPanel plan={plan} />}
-      {plan?.debt && <SleepDebtPanel debt={plan.debt} bedtime={bedtime} />}
-
-      {report && hasAnyData && (
-        <>
-          <SectionHeader title="Today" />
-          <ActivityPanel date={date} steps={daily.steps?.get(date) ?? null} stepGoal={report.stepGoal} load={report.load} activities={activities} />
-          <StressPanel date={date} daily={daily} />
-        </>
-      )}
-
-      <SectionHeader
-        title="Insights"
-        right={insights.length > 3 ? (
-          <Button compact onPress={() => setShowAllInsights(!showAllInsights)}>{showAllInsights ? 'Show fewer' : `All ${insights.length}`}</Button>
-        ) : undefined}
-      />
-      {insights.length === 0 ? (
-        <Panel>
-          <Text style={{color: chart.inkMuted}}>Nothing stands out yet. Insights appear once there are a couple of weeks of data.</Text>
-        </Panel>
-      ) : (
-        visibleInsights.map((i) => <InsightCard key={i.id} insight={i} />)
-      )}
-
       {tags.length > 0 && (
         <>
-          <SectionHeader title="Log today" right={<Button compact onPress={() => router.push('/tags')}>Journal</Button>} />
+          <SectionHeader title="Log today" right={<Button compact icon="notebook-outline" onPress={() => router.push('/journal')}>Journal</Button>} />
           <Panel>
             <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
               {tags.map((t) => {
@@ -275,10 +230,65 @@ export default function TodayScreen() {
                 );
               })}
             </View>
-            <Text variant="labelSmall" style={{color: chart.inkMuted, marginTop: 10}}>Tap to add one, long-press to remove one. Amount tags open an input.</Text>
+            <Text variant="labelSmall" style={{color: chart.inkMuted, marginTop: 10}}>Tap to add, long-press to remove. Notes and past days are in the Journal.</Text>
           </Panel>
         </>
       )}
+
+      {hasAnyData && tags.length === 0 && (
+        <Panel onPress={() => router.push('/journal')}>
+          <PanelHeader title="Log what you do" subtitle="Add tags like alcohol or caffeine in the Journal to see how they affect you" icon="notebook-outline" color={chart.series[3]} />
+        </Panel>
+      )}
+
+      {report && <BodyCheckPanel check={report.bodyCheck} />}
+
+      {(lastNight || plan) && <SectionHeader title="Sleep" />}
+      {lastNight && (
+        <CollapsiblePanel
+          id="today.last_night"
+          title={lastNight.date === date ? 'Last night' : nightLabel(lastNight.date)}
+          subtitle={`${formatClock(minutesFromMidnight(lastNight.startTs, lastNight.date))} → ${formatClock(minutesFromMidnight(lastNight.endTs, lastNight.date))}` +
+            (bedtime && lastNight.date >= date ? ` · bed ${shiftText(bedtime.lastDelta)}` : '') +
+            (garminScore != null ? ` · Garmin score ${Math.round(garminScore)}` : '')}
+          icon="weather-night"
+          color={chart.category.sleep}
+          defaultOpen
+          right={
+            <Text variant="headlineSmall" style={{color: chart.inkPrimary, fontWeight: '700'}}>
+              {formatMinutes(lastNight.deepMin + lastNight.lightMin + lastNight.remMin)}
+            </Text>
+          }
+          onPress={() => router.push({pathname: '/metric/[id]', params: {id: 'sleep_total_min'}})}
+        >
+          <StageBar night={lastNight} />
+        </CollapsiblePanel>
+      )}
+      {plan && lastNight && <SleepPlanPanel plan={plan} />}
+      {plan?.debt && <SleepDebtPanel debt={plan.debt} bedtime={bedtime} />}
+
+      {report && hasAnyData && (
+        <>
+          <SectionHeader title="Today" />
+          <ActivityPanel date={date} steps={daily.steps?.get(date) ?? null} stepGoal={report.stepGoal} load={report.load} activities={activities} />
+          <StressPanel date={date} daily={daily} />
+        </>
+      )}
+
+      <SectionHeader
+        title="Insights"
+        right={insights.length > 1 ? (
+          <Button compact onPress={() => setShowAllInsights(!showAllInsights)}>{showAllInsights ? 'Show fewer' : `${insights.length - 1} more`}</Button>
+        ) : undefined}
+      />
+      {insights.length === 0 ? (
+        <Panel>
+          <Text style={{color: chart.inkMuted}}>Nothing stands out yet. Insights appear once there are a couple of weeks of data.</Text>
+        </Panel>
+      ) : (
+        visibleInsights.map((i) => <InsightCard key={i.id} insight={i} />)
+      )}
+
       <TagAmountDialog
         tag={amount?.tag ?? null}
         date={amount?.date ?? date}

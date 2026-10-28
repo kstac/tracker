@@ -42,6 +42,7 @@ export default function RootLayout() {
                   <Stack.Screen name="experiment/new" options={{title: 'New experiment'}} />
                   <Stack.Screen name="experiment/[id]" options={{title: ''}} />
                   <Stack.Screen name="training" options={{title: 'Training'}} />
+                  <Stack.Screen name="journal" options={{title: 'Journal'}} />
                   <Stack.Screen name="body" options={{title: 'Body check'}} />
                   <Stack.Screen name="ask" options={{title: 'Ask about your data'}} />
                   <Stack.Screen name="garmin-login" options={{title: 'Sign in to Garmin', presentation: 'modal'}} />

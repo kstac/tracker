@@ -22,11 +22,10 @@ export default function ScoreCard({kind, days}: {kind: ScoreKind; days: ScoreHis
   const def = SCORE_DEFS[kind];
   const color = chart.category[def.category];
   const end = today();
-  const week = days.filter((d) => d.date > addDays(end, -7));
-  const prevWeek = days.filter((d) => d.date <= addDays(end, -7) && d.date > addDays(end, -14));
-  const cur = avg(week, kind);
-  const prev = avg(prevWeek, kind);
-  const spark = days.filter((d) => d.date > addDays(end, -30) && d[kind]).map((d) => d[kind]!.value);
+  const month = days.filter((d) => d.date > addDays(end, -30));
+  const spark = month.filter((d) => d[kind]).map((d) => d[kind]!.value);
+  const cur = spark.at(-1) ?? null;
+  const usual = avg(month, kind);
   const lo = spark.length ? Math.min(...spark) : 0;
 
   return (
@@ -34,12 +33,12 @@ export default function ScoreCard({kind, days}: {kind: ScoreKind; days: ScoreHis
       <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
         <IconBadge icon={def.icon} color={color} size={32} />
         <Text variant="titleSmall" style={{color: chart.inkPrimary, fontWeight: '600', flex: 1}}>{def.label}</Text>
-        {cur != null && prev != null && <DeltaPill def={def} delta={cur - prev} suffix="vs last week" />}
+        {cur != null && usual != null && spark.length > 1 && <DeltaPill def={def} delta={cur - usual} suffix="vs usual" />}
       </View>
       <View style={{flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10}}>
         <View>
           <Text variant="headlineSmall" style={{color: chart.inkPrimary, fontWeight: '700'}}>{cur == null ? '–' : Math.round(cur)}</Text>
-          <Text variant="labelSmall" style={{color: chart.inkMuted}}>7-day average</Text>
+          <Text variant="labelSmall" style={{color: chart.inkMuted}}>Latest{usual != null ? ` · 30-day average ${Math.round(usual)}` : ''}</Text>
         </View>
         {spark.length > 1 && (
           <View pointerEvents="none" style={{width: SPARK_WIDTH, height: 44, overflow: 'hidden'}}>

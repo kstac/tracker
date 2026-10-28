@@ -22,29 +22,56 @@ export function openFactor(effect: Pick<Effect, 'factorId' | 'factorKind'>) {
   else router.push({pathname: '/factor/[id]', params: {id: effect.factorId}});
 }
 
-/** `detailed` adds the dose and timing breakdowns, which are worth showing once per factor rather than on every row. */
-export function EffectRow({effect, onPress, detailed = false}: {effect: Effect; onPress?: () => void; detailed?: boolean}) {
+const SHORT_CONFIDENCE: Record<Effect['confidence'], string> = {strong: 'Strong', likely: 'Likely', possible: 'Possible', none: 'No clear link'};
+
+function ConfidenceDot({effect}: {effect: Effect}) {
   const {chart} = useAppTheme();
+  const color = effect.confidence === 'strong' ? chart.status.good : effect.confidence === 'likely' ? chart.series[0] : chart.inkMuted;
+  return (
+    <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
+      <View style={{width: 8, height: 8, borderRadius: 4, backgroundColor: color}} />
+      <Text variant="labelSmall" style={{color: chart.inkMuted}}>{SHORT_CONFIDENCE[effect.confidence]}</Text>
+    </View>
+  );
+}
+
+/**
+ * `compact` is for lists: one sentence and a confidence dot. Otherwise the stats line shows, and `detailed` adds a
+ * Details toggle for the adjusted figure and the dose and timing breakdowns.
+ */
+export function EffectRow({effect, onPress, detailed = false, compact = false}: {effect: Effect; onPress?: () => void; detailed?: boolean; compact?: boolean}) {
+  const {chart} = useAppTheme();
+  const [open, setOpen] = useState(false);
   const color = effect.good == null ? chart.inkSecondary : effect.good ? chart.deltaGood : chart.status.critical;
   const icon = effect.diff > 0 ? 'arrow-up-bold-circle-outline' : 'arrow-down-bold-circle-outline';
   const adjusted = effect.adjustedDiff != null && Math.abs(effect.adjustedDiff - effect.rawDiff) >= Math.max(0.5, Math.abs(effect.rawDiff) * 0.25);
+  const hasDetails = !compact && (adjusted || (detailed && (effect.dose || effect.timing)));
   const body = (
     <View style={{flexDirection: 'row', gap: 10}}>
       <MaterialCommunityIcons name={icon} size={22} color={color} style={{marginTop: 1}} />
       <View style={{flex: 1, gap: 2}}>
         <Text variant="bodyMedium" style={{color: chart.inkPrimary}}>{effect.summary}</Text>
-        <Text variant="bodySmall" style={{color: chart.inkMuted}}>
-          {CONFIDENCE_LABEL[effect.confidence]} · {effect.nWith} days with, {effect.nWithout} without · likely between {signed(effect.metric, effect.ciLow)} and {signed(effect.metric, effect.ciHigh)}
-        </Text>
-        {adjusted && (
+        {compact ? (
+          <ConfidenceDot effect={effect} />
+        ) : (
           <Text variant="bodySmall" style={{color: chart.inkMuted}}>
-            The raw difference is {signed(effect.metric, effect.rawDiff)}; this figure allows for weekends, training and other tags.
+            {CONFIDENCE_LABEL[effect.confidence]} · {effect.nWith} days with, {effect.nWithout} without · likely between {signed(effect.metric, effect.ciLow)} and {signed(effect.metric, effect.ciHigh)}
           </Text>
         )}
         {effect.sharedWith.length > 0 && (
           <Text variant="bodySmall" style={{color: chart.status.warning}}>Usually logged with {effect.sharedWith.join(', ')}, so their effects can&apos;t be separated.</Text>
         )}
-        {detailed && effect.dose && (
+        {hasDetails && (
+          <Pressable onPress={() => setOpen(!open)} hitSlop={8} style={{alignSelf: 'flex-start'}}>
+            <Text variant="labelMedium" style={{color: chart.series[0], marginTop: 2}}>{open ? 'Hide details' : 'Details'}</Text>
+          </Pressable>
+        )}
+        {open && adjusted && (
+          <Text variant="bodySmall" style={{color: chart.inkMuted}}>
+            The raw difference is {signed(effect.metric, effect.rawDiff)}; this figure allows for weekends, training and other tags.
+          </Text>
+        )}
+        {open && detailed && effect.dose && (
           <View style={{marginTop: 6, gap: 4}}>
             <Text variant="labelSmall" style={{color: chart.inkSecondary}}>By amount</Text>
             {effect.dose.map((b) => (
@@ -55,7 +82,7 @@ export function EffectRow({effect, onPress, detailed = false}: {effect: Effect; 
             ))}
           </View>
         )}
-        {detailed && effect.timing && (
+        {open && detailed && effect.timing && (
           <Text variant="bodySmall" style={{color: chart.inkSecondary, marginTop: 4}}>
             Within {effect.timing.thresholdHours}h of bed: {formatTargetValue(effect.metric, effect.timing.lateMean)} ({effect.timing.nLate} days) · earlier: {formatTargetValue(effect.metric, effect.timing.earlyMean)} ({effect.timing.nEarly} days)
           </Text>

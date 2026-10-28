@@ -32,7 +32,7 @@ export const EFFECT_TARGETS: EffectTarget[] = [
   {key: 'body_battery_wake@2', metric: 'body_battery_wake', lag: 2, label: 'Body Battery at wake', phrase: 'your Body Battery two mornings later'},
   {key: 'readiness@2', metric: 'readiness', lag: 2, label: 'Readiness', phrase: 'your readiness two days later'},
   {key: 'stress_avg@0', metric: 'stress_avg', lag: 0, label: 'Average stress', phrase: 'your stress that day'},
-  {key: 'steps@0', metric: 'steps', lag: 0, label: 'Steps', phrase: 'your steps that day'},
+  {key: 'steps@0', metric: 'steps', lag: 0, label: 'Steps', phrase: 'your step count that day'},
   {key: 'checkin_mood@0', metric: 'checkin_mood', lag: 0, label: 'Mood', phrase: 'your mood that day'},
 ];
 
@@ -244,13 +244,15 @@ export function autoFactors(input: EffectsInput): Factor[] {
   if (starts && starts.size >= 28) {
     const nights = [...starts.keys()].map((wake) => addDays(wake, -1)).filter(inWindow);
     const usual = median(nights.map((d) => starts.get(addDays(d, 1))!))!;
+    // Same-day targets happen before bedtime, so a bedtime can't explain them.
+    const beforeBed = ['stress_avg@0', 'steps@0', 'checkin_mood@0'];
     add({
       id: 'late_bed', name: 'Late nights', lead: 'When you go to sleep late', description: 'Nights you fell asleep 45+ minutes later than usual.',
-      present: new Set(nights.filter((d) => starts.get(addDays(d, 1))! >= usual + 45)), eligible: new Set(nights),
+      present: new Set(nights.filter((d) => starts.get(addDays(d, 1))! >= usual + 45)), eligible: new Set(nights), excludeTargets: beforeBed,
     });
     add({
       id: 'early_bed', name: 'Early nights', lead: 'When you go to sleep early', description: 'Nights you fell asleep 45+ minutes earlier than usual.',
-      present: new Set(nights.filter((d) => starts.get(addDays(d, 1))! <= usual - 45)), eligible: new Set(nights),
+      present: new Set(nights.filter((d) => starts.get(addDays(d, 1))! <= usual - 45)), eligible: new Set(nights), excludeTargets: beforeBed,
     });
   }
 
@@ -513,14 +515,31 @@ export const CONFIDENCE_LABEL: Record<Confidence, string> = {
 };
 
 /** The clearest effects first, keeping only the strongest target per factor so one factor doesn't dominate. */
-export function topEffects(effects: Effect[], opts: {good?: boolean; minConfidence?: Confidence; limit?: number} = {}): Effect[] {
+/** Auto factors that describe something you choose to do. The rest (stressful days, weekends) are context, not levers. */
+const ACTIONABLE_AUTO = new Set(['workout', 'hard_day', 'active_day', 'low_activity', 'late_bed', 'early_bed', 'short_night', 'nap']);
+
+export function isActionable(effect: Pick<Effect, 'factorId' | 'factorKind'>): boolean {
+  return effect.factorKind === 'tag' || ACTIONABLE_AUTO.has(effect.factorId);
+}
+
+/** Two factors that fall on the same days give the same result, e.g. workout days and hard days when every workout is hard. */
+function sameResult(a: Effect, b: Effect) {
+  return a.targetKey === b.targetKey && a.nWith === b.nWith && a.nWithout === b.nWithout && Math.abs(a.diff - b.diff) <= Math.max(0.1, Math.abs(a.diff) * 0.05);
+}
+
+export function topEffects(
+  effects: Effect[],
+  opts: {good?: boolean | null; minConfidence?: Confidence; limit?: number; actionable?: boolean} = {},
+): Effect[] {
   const min = CONFIDENCE_RANK[opts.minConfidence ?? 'likely'];
   const seen = new Set<string>();
   const out: Effect[] = [];
   for (const e of effects) {
     if (CONFIDENCE_RANK[e.confidence] < min) continue;
-    if (opts.good != null && e.good !== opts.good) continue;
+    if (opts.good !== undefined && e.good !== opts.good) continue;
+    if (opts.actionable != null && isActionable(e) !== opts.actionable) continue;
     if (seen.has(e.factorId)) continue;
+    if (out.some((o) => sameResult(o, e))) continue;
     seen.add(e.factorId);
     out.push(e);
     if (opts.limit && out.length >= opts.limit) break;

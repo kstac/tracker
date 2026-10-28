@@ -1,6 +1,6 @@
 import {describe, expect, it} from '@jest/globals';
 import {addDays, IsoDate} from '@/lib/dates';
-import {computeEffects, describeDiff, EffectsInput, topEffects} from '@/insights/effects';
+import {computeEffects, describeDiff, Effect, EffectsInput, topEffects} from '@/insights/effects';
 import {TODAY} from '@/insights/__fixtures__/series';
 import {Tag, TagEntry} from '@/metrics/types';
 
@@ -102,5 +102,26 @@ describe('computeEffects', () => {
     expect(describeDiff('resting_hr', 3.2)).toBe('3 bpm higher');
     expect(describeDiff('checkin_energy', -0.62)).toBe('0.6 lower out of 5');
     expect(describeDiff('readiness', 1)).toBe('1 point higher');
+  });
+});
+
+describe('topEffects', () => {
+  const effect = (factorId: string, factorKind: 'tag' | 'auto', over: Partial<Effect> = {}): Effect => ({
+    factorId, factorName: factorId, factorKind, targetKey: 'resting_hr@2', metric: 'resting_hr', targetLabel: 'Resting heart rate', lag: 2,
+    withMean: 58, withoutMean: 56, rawDiff: 2, adjustedDiff: null, diff: 2, pct: 3, ciLow: 1, ciHigh: 3, p: 0.001, q: 0.01, cohensD: 0.8,
+    nWith: 121, nWithout: 242, confidence: 'strong', good: false, summary: factorId, dose: null, timing: null, sharedWith: [], ...over,
+  });
+
+  it('keeps the first of two factors with the same result', () => {
+    const effects = [effect('workout', 'auto'), effect('hard_day', 'auto'), effect('alcohol', 'tag', {nWith: 61, nWithout: 304})];
+    expect(topEffects(effects).map((e) => e.factorId)).toEqual(['workout', 'alcohol']);
+  });
+
+  it('splits things you can change from background patterns', () => {
+    const effects = [effect('stressful_day', 'auto', {nWith: 90}), effect('weekend', 'auto', {nWith: 100}), effect('late_bed', 'auto', {nWith: 20}), effect('alcohol', 'tag', {nWith: 61})];
+    expect({
+      actionable: topEffects(effects, {actionable: true}).map((e) => e.factorId),
+      other: topEffects(effects, {actionable: false}).map((e) => e.factorId),
+    }).toEqual({actionable: ['late_bed', 'alcohol'], other: ['stressful_day', 'weekend']});
   });
 });

@@ -1,7 +1,7 @@
 import {View} from 'react-native';
 import {router} from 'expo-router';
 import {Text} from 'react-native-paper';
-import {Panel, PanelHeader} from '@/components/ui/Panel';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
 import {activityLabel} from '@/components/training/activityTypes';
 import {dedupeActivities, LoadReport} from '@/insights';
 import {formatMinutes, IsoDate, parseIsoDate} from '@/lib/dates';
@@ -32,8 +32,21 @@ export default function ActivityPanel({date, steps, stepGoal, load, activities}:
   const weekDiff = load.prevWeekLoad > 0 ? Math.round(((week - load.prevWeekLoad) / load.prevWeekLoad) * 100) : null;
 
   return (
-    <Panel onPress={() => router.push('/training')}>
-      <PanelHeader title="Activity & training" subtitle={target ? target.reason : load.statusText} icon="run-fast" color={color} />
+    <CollapsiblePanel
+      id="today.activity"
+      title="Activity & training"
+      subtitle={target ? target.reason : load.statusText}
+      summary={`Load ${Math.round(todayLoad)}${target ? ` of ${target.low}–${target.high} target` : ''}`}
+      icon="run-fast"
+      color={color}
+      right={
+        <View style={{alignItems: 'flex-end'}}>
+          <Text variant="titleMedium" style={{color: chart.inkPrimary, fontWeight: '700'}}>{steps == null ? '–' : Math.round(steps).toLocaleString()}</Text>
+          <Text variant="labelSmall" style={{color: chart.inkMuted}}>of {stepGoal.toLocaleString()} steps</Text>
+        </View>
+      }
+      onPress={() => router.push('/training')}
+    >
       <View style={{gap: 14}}>
         <View style={{gap: 6}}>
           <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
@@ -65,6 +78,6 @@ export default function ActivityPanel({date, steps, stepGoal, load, activities}:
           </View>
         )}
       </View>
-    </Panel>
+    </CollapsiblePanel>
   );
 }

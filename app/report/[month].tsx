@@ -4,6 +4,7 @@ import {router, Stack, useLocalSearchParams} from 'expo-router';
 import {IconButton, Text} from 'react-native-paper';
 import {EffectRow, openFactor} from '@/components/effects/EffectList';
 import {scoreColor} from '@/components/ScoreRing';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
 import {Panel, PanelHeader} from '@/components/ui/Panel';
 import {computeMonthReport, computeRadar, monthEnd, MonthStats, shiftMonth} from '@/insights';
 import {scoreLabel} from '@/insights/score';
@@ -103,8 +104,7 @@ export default function MonthReportScreen() {
         )}
       </Panel>
 
-      <Panel>
-        <PanelHeader title="Readiness calendar" icon="calendar-month-outline" color={chart.category.recovery} />
+      <CollapsiblePanel id="report.calendar" title="Readiness calendar" icon="calendar-month-outline" color={chart.category.recovery} defaultOpen>
         <View style={{flexDirection: 'row', marginBottom: 4}}>
           {WEEKDAYS.map((d) => <Text key={d} variant="labelSmall" style={{flex: 1, textAlign: 'center', color: chart.inkMuted}}>{d[0]}</Text>)}
         </View>
@@ -125,10 +125,9 @@ export default function MonthReportScreen() {
             Best day {parseIsoDate(data.best.date).toLocaleDateString(undefined, {weekday: 'short', day: 'numeric'})} ({data.best.value}) · toughest {parseIsoDate(data.worst.date).toLocaleDateString(undefined, {weekday: 'short', day: 'numeric'})} ({data.worst.value})
           </Text>
         )}
-      </Panel>
+      </CollapsiblePanel>
 
-      <Panel>
-        <PanelHeader title="By day of the week" icon="calendar-week" color={chart.series[0]} />
+      <CollapsiblePanel id="report.weekday" title="By day of the week" summary="Steps, readiness and sleep by weekday" icon="calendar-week" color={chart.series[0]}>
         <View style={{gap: 6}}>
           {WEEKDAYS.map((d, i) => (
             <View key={d} style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
@@ -143,20 +142,19 @@ export default function MonthReportScreen() {
           ))}
         </View>
         <Text variant="labelSmall" style={{color: chart.inkMuted, marginTop: 8}}>Bars: steps · R: readiness · S: sleep score</Text>
-      </Panel>
+      </CollapsiblePanel>
 
-      <Panel>
+      <CollapsiblePanel id="report.numbers" title="The numbers" summary="This month against last month" icon="table" color={chart.series[2]}>
         <View style={{flexDirection: 'row', marginBottom: 4}}>
-          <Text variant="titleMedium" style={{flex: 1, color: chart.inkPrimary, fontWeight: '600'}}>The numbers</Text>
+          <View style={{flex: 1}} />
           <Text variant="labelSmall" style={{width: 80, textAlign: 'right', color: chart.inkMuted}}>This month</Text>
           <Text variant="labelSmall" style={{width: 80, textAlign: 'right', color: chart.inkMuted}}>Last month</Text>
         </View>
         {rows(data.cur, data.prev).map((r) => <Compare key={r.label} label={r.label} cur={r.cur} prev={r.prev} fmt={r.fmt} higherIsBetter={r.hib} />)}
-      </Panel>
+      </CollapsiblePanel>
 
       {data.tags.length > 0 && (
-        <Panel>
-          <PanelHeader title="Tags" icon="tag-multiple-outline" color={chart.series[1]} />
+        <CollapsiblePanel id="report.tags" title="Tags" summary={data.tags.map((t) => `${t.name} ${formatTagAmount(t.total, t.unit)}`).join(' · ')} icon="tag-multiple-outline" color={chart.series[1]}>
           {data.tags.map((t) => (
             <View key={t.tagId} style={{flexDirection: 'row', paddingVertical: 3}}>
               <Text variant="bodySmall" style={{flex: 1, color: chart.inkSecondary}}>{t.name} <Text style={{color: chart.inkMuted}}>({t.days} days)</Text></Text>
@@ -164,16 +162,15 @@ export default function MonthReportScreen() {
               <Text variant="bodySmall" style={{width: 80, textAlign: 'right', color: chart.inkSecondary}}>{formatTagAmount(t.prevTotal, t.unit)}</Text>
             </View>
           ))}
-        </Panel>
+        </CollapsiblePanel>
       )}
 
       {(data.helps.length > 0 || data.hurts.length > 0) && (
-        <Panel>
-          <PanelHeader title="Your clearest patterns" icon="chart-scatter-plot" color={chart.series[6]} />
+        <CollapsiblePanel id="report.patterns" title="Your clearest patterns" summary={`${data.helps.length + data.hurts.length} patterns this month`} icon="chart-scatter-plot" color={chart.series[6]}>
           <View style={{gap: 12}}>
             {[...data.helps, ...data.hurts].map((e) => <EffectRow key={`${e.factorId}-${e.targetKey}`} effect={e} onPress={() => openFactor(e)} />)}
           </View>
-        </Panel>
+        </CollapsiblePanel>
       )}
     </ScrollView>
   );

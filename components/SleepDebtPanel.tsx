@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {Pressable, View} from 'react-native';
 import {Text} from 'react-native-paper';
-import {Panel, PanelHeader} from '@/components/ui/Panel';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
 import {BedtimeShift, SleepDebt} from '@/insights';
 import {formatClock, formatMinutes, nightLabel} from '@/lib/dates';
 import {useAppTheme} from '@/theme';
@@ -23,19 +23,23 @@ export default function SleepDebtPanel({debt, bedtime}: {debt: SleepDebt; bedtim
   const surplus = chart.series[0];
   const deficit = chart.series[7];
 
+  const changeText = change != null && Math.abs(change) >= 15 ? `${formatMinutes(Math.abs(change))} ${change < 0 ? 'less' : 'more'} than a week ago` : null;
+  const summary = [changeText, bedtime?.weekAvgDelta != null ? `bedtime ${shiftText(bedtime.weekAvgDelta)}` : null].filter(Boolean).join(' · ');
+
   return (
-    <Panel>
-      <PanelHeader
-        title="Sleep debt"
-        subtitle={`Last ${debt.nights.length} nights against ${formatMinutes(debt.needMin)} a night`}
-        icon="bed-clock"
-        color={chart.category.sleep}
-        right={
-          <Text variant="headlineSmall" style={{color: chart.inkPrimary, fontWeight: '700'}}>
-            {hasDebt ? formatMinutes(debt.debtMin) : 'None'}
-          </Text>
-        }
-      />
+    <CollapsiblePanel
+      id="today.sleep_debt"
+      title="Sleep debt"
+      subtitle={`Last ${debt.nights.length} nights against ${formatMinutes(debt.needMin)} a night`}
+      summary={summary || undefined}
+      icon="scale-unbalanced"
+      color={chart.category.sleep}
+      right={
+        <Text variant="headlineSmall" style={{color: chart.inkPrimary, fontWeight: '700'}}>
+          {hasDebt ? formatMinutes(debt.debtMin) : 'None'}
+        </Text>
+      }
+    >
 
       <View style={{flexDirection: 'row', alignItems: 'center', height: BAR_AREA * 2, gap: 3}}>
         {debt.nights.map((n, i) => {
@@ -63,10 +67,8 @@ export default function SleepDebtPanel({debt, bedtime}: {debt: SleepDebt; bedtim
       </Text>
 
       <View style={{marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: chart.grid, gap: 4}}>
-        {change != null && Math.abs(change) >= 15 && (
-          <Text variant="bodyMedium" style={{color: change < 0 ? chart.deltaGood : chart.status.critical}}>
-            {formatMinutes(Math.abs(change))} {change < 0 ? 'less' : 'more'} debt than a week ago
-          </Text>
+        {changeText && (
+          <Text variant="bodyMedium" style={{color: change! < 0 ? chart.deltaGood : chart.status.critical}}>{changeText}</Text>
         )}
         {bedtime && (
           <Text variant="bodyMedium" style={{color: chart.inkPrimary}}>
@@ -75,6 +77,6 @@ export default function SleepDebtPanel({debt, bedtime}: {debt: SleepDebt; bedtim
           </Text>
         )}
       </View>
-    </Panel>
+    </CollapsiblePanel>
   );
 }

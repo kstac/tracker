@@ -217,7 +217,7 @@ describe('screens render with a year of data', () => {
       return <S />;
     }, {}, 'What helps you'],
     ['Journal', () => {
-      const S = require('@/app/(tabs)/tags').default;
+      const S = require('@/app/journal').default;
       return <S />;
     }, {}, 'Alcohol'],
     ['Settings', () => {

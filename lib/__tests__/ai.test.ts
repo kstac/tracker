@@ -11,12 +11,12 @@ const messages: ChatMessage[] = [
 
 describe('buildChatRequest', () => {
   it('sends Gemini the data as a system instruction and maps assistant turns to model', () => {
-    const req = buildChatRequest('gemini', 'gemini-flash-latest', 'AIzaKEY', messages, 'DATA');
+    const req = buildChatRequest('gemini', 'gemini-flash-latest', 'test-key', messages, 'DATA');
     const system = (req.body as {systemInstruction: {parts: {text: string}[]}}).systemInstruction.parts[0].text;
     expect(system).toContain('<data>\nDATA\n</data>');
     expect(req).toEqual({
       url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-      headers: {'content-type': 'application/json', 'x-goog-api-key': 'AIzaKEY'},
+      headers: {'content-type': 'application/json', 'x-goog-api-key': 'test-key'},
       body: {
         systemInstruction: {parts: [{text: system}]},
         contents: [
@@ -29,12 +29,12 @@ describe('buildChatRequest', () => {
   });
 
   it('sends Anthropic the messages unchanged with the data in the system prompt', () => {
-    const req = buildChatRequest('anthropic', 'claude-opus-5-5', 'sk-ant-KEY', messages, 'DATA');
+    const req = buildChatRequest('anthropic', 'claude-opus-5-5', 'test-key', messages, 'DATA');
     const system = (req.body as {system: string}).system;
     expect(system).toContain('<data>\nDATA\n</data>');
     expect(req).toEqual({
       url: 'https://api.anthropic.com/v1/messages',
-      headers: {'content-type': 'application/json', 'x-api-key': 'sk-ant-KEY', 'anthropic-version': '2023-06-01'},
+      headers: {'content-type': 'application/json', 'x-api-key': 'test-key', 'anthropic-version': '2023-06-01'},
       body: {model: 'claude-opus-5-5', max_tokens: 1200, system, messages},
     });
   });

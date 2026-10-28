@@ -2,7 +2,8 @@ import {ReactNode, useCallback, useState} from 'react';
 import {Alert, Platform, ScrollView, View} from 'react-native';
 import {router, useFocusEffect} from 'expo-router';
 import {Button, Dialog, Divider, Menu, Portal, SegmentedButtons, Switch, Text} from 'react-native-paper';
-import {Panel, PanelHeader, SectionHeader} from '@/components/ui/Panel';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
+import {Panel, SectionHeader} from '@/components/ui/Panel';
 import EditValueDialog, {EditSpec} from '@/components/settings/EditValueDialog';
 import ChangelogPanel from '@/components/settings/ChangelogPanel';
 import {AI_MODELS, AI_PROVIDERS, AiProvider, getApiKey, getModel, getProvider, modelsFor, setApiKey, setModel, setProvider} from '@/lib/ai';
@@ -61,6 +62,8 @@ function formatImportReport(r: LegacyImportReport | null) {
   return [`Imported ${new Date(r.at).toLocaleString()}`, ...lines].join('\n');
 }
 
+const NOTIFICATION_KEYS = ['readiness', 'eveningTags', 'strain', 'bedtime', 'weekly', 'monthly', 'syncProblem'] as const;
+
 const REMINDER_TIMES = [19, 20, 21, 22].map((hour) => ({hour, minute: 0}));
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -105,6 +108,7 @@ export default function SettingsScreen() {
   const [notif, setNotif] = useState<NotificationPrefs>(DEFAULT_PREFS);
   const [notifAllowed, setNotifAllowed] = useState(false);
   const [timeMenu, setTimeMenu] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
     const status = await getHealthConnectStatus();
@@ -116,6 +120,7 @@ export default function SettingsScreen() {
     setNotifAllowed(await permissionGranted());
     const provider = await getProvider();
     setAi({provider, hasKey: !!(await getApiKey(provider)), model: await getModel(provider)});
+    setLoaded(true);
   }, []);
 
   const updateNotif = async (patch: Partial<NotificationPrefs>) => {
@@ -223,28 +228,141 @@ export default function SettingsScreen() {
     setDialog({title: 'Old tracker import', body: formatImportReport(report)});
   };
 
+  const garminBroken = lastSync?.garmin.status === 'error' && !!lastSync.garmin.authBroken;
+  const goalsSummary = [
+    `Steps ${(settings.stepGoal ?? report?.stepGoal ?? 8000).toLocaleString()}`,
+    `Sleep need ${formatMinutes(settings.sleepNeedMin ?? baselineNeed(sleep, today()).min)}`,
+    `Wake ${settings.wakeWeekday != null ? formatClock(settings.wakeWeekday) : 'auto'}`,
+  ].join(' · ');
+  const profileSummary = [
+    settings.birthYear ? `Born ${settings.birthYear}` : null,
+    settings.sex === 'male' ? 'Male' : settings.sex === 'female' ? 'Female' : null,
+    `Max HR ${settings.maxHr ?? report?.load.profile.maxHr ?? '–'} bpm`,
+  ].filter(Boolean).join(' · ');
+  const notifOn = NOTIFICATION_KEYS.filter((k) => notif[k]).length;
+
   return (
     <ScrollView style={{backgroundColor: chart.page}} contentContainerStyle={{paddingTop: 4, paddingBottom: 32}}>
       <SectionHeader title="What's new" />
       <ChangelogPanel />
 
-      <SectionHeader title="Appearance" />
-      <Panel>
-        <PanelHeader title="Theme" icon="theme-light-dark" color={chart.series[6]} />
+      <Panel style={{flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10}}>
+        <Text variant="bodyLarge" style={{color: chart.inkPrimary}}>Theme</Text>
         <SegmentedButtons
           value={preference}
           onValueChange={(v) => setPreference(v as ThemePreference)}
+          density="small"
+          style={{flex: 1}}
           buttons={[
-            {value: 'system', label: 'System', icon: 'cellphone'},
-            {value: 'light', label: 'Light', icon: 'white-balance-sunny'},
-            {value: 'dark', label: 'Dark', icon: 'weather-night'},
+            {value: 'system', label: 'System'},
+            {value: 'light', label: 'Light'},
+            {value: 'dark', label: 'Dark'},
           ]}
         />
       </Panel>
 
+      <SectionHeader title="Connections" />
+      <CollapsiblePanel id="settings.hc" title="Health Connect" subtitle={hc ? HC_TEXT[hc] : 'Checking…'} icon="heart-pulse" color={chart.category.heart} defaultOpen={loaded && hc !== 'ready'}>
+        <View style={{gap: 6}}>
+          <Text variant="bodySmall" style={{color: chart.inkSecondary}}>
+            Steps, heart rate, sleep stages, calories and workouts that Garmin Connect shares with Health Connect.
+            {hc === 'ready' && !hcHistory ? ' History access is off, so only the last 30 days can be read.' : ''}
+          </Text>
+          <Outcome outcome={lastSync?.healthConnect} />
+        </View>
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12}}>
+          {hc === 'ready' ? (
+            <Button onPress={() => openHealthConnectSettings()}>Manage permissions</Button>
+          ) : (
+            <Button mode="contained" disabled={hc === 'unavailable'} onPress={connectHc}>Connect</Button>
+          )}
+        </View>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
+        id="settings.garmin"
+        title="Garmin Connect"
+        subtitle={garmin.connected ? `Connected${garmin.name ? ` as ${garmin.name}` : ''}` : 'Not connected'}
+        summaryColor={garminBroken ? chart.status.critical : undefined}
+        summary={garminBroken ? 'Signed out, sign in again to resume' : undefined}
+        icon="watch"
+        color={chart.category.recovery}
+        defaultOpen={loaded && (!garmin.connected || garminBroken)}
+      >
+        <View style={{gap: 6}}>
+          <Text variant="bodySmall" style={{color: chart.inkSecondary}}>
+            Body Battery, stress, sleep score, VO2 max, respiration and Pulse Ox, which Garmin does not share with Health Connect. This uses Garmin’s unofficial app API, so it can stop working if Garmin changes it.
+          </Text>
+          {garmin.hrv === 'no' && (
+            <Text variant="bodySmall" style={{color: chart.inkMuted}}>Your watch doesn’t report overnight HRV, so overnight stress is used in its place.</Text>
+          )}
+          <Outcome outcome={lastSync?.garmin} />
+          {lastSync?.garmin.status === 'error' && lastSync.garmin.authBroken && (
+            <Text variant="bodySmall" style={{color: chart.status.critical}}>Garmin signed this app out. Sign in again to resume.</Text>
+          )}
+        </View>
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12}}>
+          {garmin.connected ? (
+            <>
+              <Button onPress={() => router.push('/garmin-login')}>Sign in again</Button>
+              <Button onPress={disconnectGarmin}>Disconnect</Button>
+            </>
+          ) : (
+            <Button mode="contained" onPress={() => router.push('/garmin-login')}>Sign in</Button>
+          )}
+        </View>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel id="settings.sync" title="Sync" subtitle={lastSync ? `Last run ${new Date(lastSync.at).toLocaleString()}` : 'Never run'} icon="sync" color={chart.series[0]} defaultOpen={loaded && !lastSync}>
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end'}}>
+          <Button onPress={resync} disabled={syncing}>Re-download history</Button>
+          <Button mode="contained" loading={syncing} disabled={syncing} onPress={() => sync().then(refresh)}>Sync now</Button>
+        </View>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
+        id="settings.ai"
+        title="Ask about your data"
+        subtitle={ai.hasKey ? 'API key saved on this phone' : `Add your own ${AI_PROVIDERS[ai.provider].company} API key to ask questions about your data`}
+        summary={`${AI_MODELS.find((m) => m.id === ai.model)?.label ?? AI_PROVIDERS[ai.provider].label} · ${ai.hasKey ? 'key saved' : 'no key yet'}`}
+        icon="chat-question-outline"
+        color={chart.series[6]}
+      >
+        <SegmentedButtons
+          value={ai.provider}
+          onValueChange={async (v) => { await setProvider(v as AiProvider); refresh(); }}
+          buttons={(Object.keys(AI_PROVIDERS) as AiProvider[]).map((p) => ({value: p, label: AI_PROVIDERS[p].label}))}
+          style={{marginBottom: 10}}
+        />
+        <Text variant="bodySmall" style={{color: chart.inkSecondary}}>
+          Each question sends a summary of your recent data to {AI_PROVIDERS[ai.provider].company}&apos;s API, billed to your key. Nothing is sent until you ask.
+        </Text>
+        <View style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 6}}>
+          <Text variant="bodyLarge" style={{color: chart.inkPrimary, flex: 1}}>Model</Text>
+          <Menu visible={modelMenu} onDismiss={() => setModelMenu(false)} anchor={<Button compact onPress={() => setModelMenu(true)}>{AI_MODELS.find((m) => m.id === ai.model)?.label ?? ai.model}</Button>}>
+            {modelsFor(ai.provider).map((m) => (
+              <Menu.Item key={m.id} title={`${m.label} · ${m.detail}`} onPress={async () => { setModelMenu(false); await setModel(ai.provider, m.id); refresh(); }} />
+            ))}
+          </Menu>
+        </View>
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
+          {ai.hasKey && <Button onPress={async () => { await setApiKey(ai.provider, null); refresh(); }}>Remove key</Button>}
+          <Button
+            mode={ai.hasKey ? 'text' : 'contained'}
+            onPress={() => {
+              const {provider} = ai;
+              const p = AI_PROVIDERS[provider];
+              setEdit({title: `${p.company} API key`, label: p.keyLabel, kind: 'text', secure: true, initial: '', hint: p.keyHint, onSave: async (v) => { await setApiKey(provider, v ? String(v) : null); refresh(); }});
+            }}
+          >
+            {ai.hasKey ? 'Change key' : 'Add key'}
+          </Button>
+          {ai.hasKey && <Button mode="contained" onPress={() => router.push('/ask')}>Open</Button>}
+        </View>
+      </CollapsiblePanel>
+
       <SectionHeader title="Goals & profile" />
-      <Panel>
-        <PanelHeader title="Goals" subtitle="Leave on Auto to let the app work them out" icon="flag-checkered" color={chart.category.activity} />
+      <CollapsiblePanel id="settings.goals" title="Goals" subtitle="Leave on Auto to let the app work them out" summary={goalsSummary} icon="flag-checkered" color={chart.category.activity}>
         <ValueRow
           title="Daily steps"
           value={settings.stepGoal ? settings.stepGoal.toLocaleString() : `Auto (${(report?.stepGoal ?? 8000).toLocaleString()})`}
@@ -271,9 +389,8 @@ export default function SettingsScreen() {
           value={settings.gradualBedtime ?? true}
           onChange={(v) => updateSettings({gradualBedtime: v})}
         />
-      </Panel>
-      <Panel>
-        <PanelHeader title="About you" subtitle="Improves training load and max heart rate estimates" icon="account-outline" color={chart.series[6]} />
+      </CollapsiblePanel>
+      <CollapsiblePanel id="settings.profile" title="About you" subtitle="Improves training load and max heart rate estimates" summary={profileSummary} icon="account-outline" color={chart.series[6]}>
         <ValueRow
           title="Year of birth"
           value={settings.birthYear ? String(settings.birthYear) : 'Not set'}
@@ -292,85 +409,27 @@ export default function SettingsScreen() {
           value={settings.maxHr ? `${settings.maxHr} bpm` : `Auto (${report?.load.profile.maxHr ?? '–'} bpm)`}
           onPress={() => setEdit({title: 'Max heart rate', label: 'bpm', kind: 'number', min: 120, max: 230, initial: settings.maxHr ? String(settings.maxHr) : '', hint: 'From a lab test or a hard all-out effort. Empty estimates it', onSave: (v) => updateSettings({maxHr: v as number | null})})}
         />
-      </Panel>
-      <Panel>
-        <PanelHeader title="Patterns" icon="chart-scatter-plot" color={chart.series[1]} />
+      </CollapsiblePanel>
+      <CollapsiblePanel id="settings.patterns" title="Patterns" summary={settings.onlyJournaledDays ? 'Only days you logged something count' : 'Every day counts'} icon="chart-scatter-plot" color={chart.series[1]}>
         <ToggleRow
           title="Only count days I logged something"
           subtitle="Off: any day without a tag counts as a day without it. On: only days with a check-in or other tags count, in case you forget to log"
           value={settings.onlyJournaledDays ?? false}
           onChange={(v) => updateSettings({onlyJournaledDays: v})}
         />
-      </Panel>
-
-      <SectionHeader title="Data sources" />
-      <Panel>
-        <PanelHeader title="Health Connect" subtitle={hc ? HC_TEXT[hc] : 'Checking…'} icon="heart-pulse" color={chart.category.heart} />
-        <View style={{gap: 6}}>
-          <Text variant="bodySmall" style={{color: chart.inkSecondary}}>
-            Steps, heart rate, sleep stages, calories and workouts that Garmin Connect shares with Health Connect.
-            {hc === 'ready' && !hcHistory ? ' History access is off, so only the last 30 days can be read.' : ''}
-          </Text>
-          <Outcome outcome={lastSync?.healthConnect} />
-        </View>
-        <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12}}>
-          {hc === 'ready' ? (
-            <Button onPress={() => openHealthConnectSettings()}>Manage permissions</Button>
-          ) : (
-            <Button mode="contained" disabled={hc === 'unavailable'} onPress={connectHc}>Connect</Button>
-          )}
-        </View>
-      </Panel>
-
-      <Panel>
-        <PanelHeader
-          title="Garmin Connect"
-          subtitle={garmin.connected ? `Connected${garmin.name ? ` as ${garmin.name}` : ''}` : 'Not connected'}
-          icon="watch"
-          color={chart.category.recovery}
-        />
-        <View style={{gap: 6}}>
-          <Text variant="bodySmall" style={{color: chart.inkSecondary}}>
-            Body Battery, stress, sleep score, VO2 max, respiration and Pulse Ox, which Garmin does not share with Health Connect. This uses Garmin’s unofficial app API, so it can stop working if Garmin changes it.
-          </Text>
-          {garmin.hrv === 'no' && (
-            <Text variant="bodySmall" style={{color: chart.inkMuted}}>Your watch doesn’t report overnight HRV, so overnight stress is used in its place.</Text>
-          )}
-          <Outcome outcome={lastSync?.garmin} />
-          {lastSync?.garmin.status === 'error' && lastSync.garmin.authBroken && (
-            <Text variant="bodySmall" style={{color: chart.status.critical}}>Garmin signed this app out. Sign in again to resume.</Text>
-          )}
-        </View>
-        <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12}}>
-          {garmin.connected ? (
-            <>
-              <Button onPress={() => router.push('/garmin-login')}>Sign in again</Button>
-              <Button onPress={disconnectGarmin}>Disconnect</Button>
-            </>
-          ) : (
-            <Button mode="contained" onPress={() => router.push('/garmin-login')}>Sign in</Button>
-          )}
-        </View>
-      </Panel>
-
-      <Panel>
-        <PanelHeader title="Sync" subtitle={lastSync ? `Last run ${new Date(lastSync.at).toLocaleString()}` : 'Never run'} icon="sync" color={chart.series[0]} />
-        <View style={{flexDirection: 'row', justifyContent: 'flex-end'}}>
-          <Button onPress={resync} disabled={syncing}>Re-download history</Button>
-          <Button mode="contained" loading={syncing} disabled={syncing} onPress={() => sync().then(refresh)}>Sync now</Button>
-        </View>
-      </Panel>
+      </CollapsiblePanel>
 
       {Platform.OS !== 'web' && (
         <>
           <SectionHeader title="Notifications" />
-          <Panel>
-            <PanelHeader
-              title="Notifications"
-              subtitle={notifAllowed ? 'Choose what the app can tell you about' : 'Turning one on will ask for permission'}
-              icon="bell-outline"
-              color={chart.series[3]}
-            />
+          <CollapsiblePanel
+            id="settings.notifications"
+            title="Notifications"
+            subtitle={notifAllowed ? 'Choose what the app can tell you about' : 'Turning one on will ask for permission'}
+            summary={`${notifOn} of ${NOTIFICATION_KEYS.length} on`}
+            icon="bell-outline"
+            color={chart.series[3]}
+          >
             <ToggleRow title="Morning report" subtitle="Readiness, what's holding it back and today's training target, shortly after you wake" value={notif.readiness} onChange={(v) => updateNotif({readiness: v})} />
             <Divider />
             <ToggleRow
@@ -403,78 +462,31 @@ export default function SettingsScreen() {
             <Text variant="bodySmall" style={{color: chart.inkMuted, marginTop: 8}}>
               Checks run in the background about once an hour, so morning and alert notifications can arrive a little after the data does.
             </Text>
-          </Panel>
+          </CollapsiblePanel>
         </>
       )}
 
-      <SectionHeader title="Backup" />
-      <Panel>
-        <PanelHeader title="Backup & restore" subtitle="Your data only lives on this phone. Save a copy somewhere safe." icon="cloud-upload-outline" color={chart.series[0]} />
+      <SectionHeader title="Data" />
+      <CollapsiblePanel id="settings.backup" title="Backup & export" subtitle="Your data only lives on this phone. Save a copy somewhere safe." summary="Back up, restore or export CSV" icon="cloud-upload-outline" color={chart.series[0]}>
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
           <Button onPress={restore}>Restore from file</Button>
           <Button mode="contained" onPress={backup}>Back up now</Button>
         </View>
-      </Panel>
-
-      <Panel>
-        <PanelHeader title="Export" subtitle="Spreadsheet-friendly CSV files" icon="file-delimited-outline" color={chart.series[2]} />
+        <Text variant="bodySmall" style={{color: chart.inkSecondary, marginTop: 12}}>Spreadsheet-friendly CSV files</Text>
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
           <Button onPress={() => shareCsv('health-workouts', activitiesCsv(activities)).catch((e) => setDialog({title: 'Export failed', body: String(e)}))}>Workouts</Button>
           <Button mode="contained" onPress={() => shareCsv('health-daily', dailyCsv(daily, report, allTags, tagEntries, notes)).catch((e) => setDialog({title: 'Export failed', body: String(e)}))}>Daily data</Button>
         </View>
-      </Panel>
-
-      <SectionHeader title="Ask about your data" />
-      <Panel>
-        <PanelHeader
-          title={AI_PROVIDERS[ai.provider].label}
-          subtitle={ai.hasKey ? 'API key saved on this phone' : `Add your own ${AI_PROVIDERS[ai.provider].company} API key to ask questions about your data`}
-          icon="chat-question-outline"
-          color={chart.series[6]}
-        />
-        <SegmentedButtons
-          value={ai.provider}
-          onValueChange={async (v) => { await setProvider(v as AiProvider); refresh(); }}
-          buttons={(Object.keys(AI_PROVIDERS) as AiProvider[]).map((p) => ({value: p, label: AI_PROVIDERS[p].label}))}
-          style={{marginBottom: 10}}
-        />
-        <Text variant="bodySmall" style={{color: chart.inkSecondary}}>
-          Each question sends a summary of your recent data to {AI_PROVIDERS[ai.provider].company}&apos;s API, billed to your key. Nothing is sent until you ask.
-        </Text>
-        <View style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 6}}>
-          <Text variant="bodyLarge" style={{color: chart.inkPrimary, flex: 1}}>Model</Text>
-          <Menu visible={modelMenu} onDismiss={() => setModelMenu(false)} anchor={<Button compact onPress={() => setModelMenu(true)}>{AI_MODELS.find((m) => m.id === ai.model)?.label ?? ai.model}</Button>}>
-            {modelsFor(ai.provider).map((m) => (
-              <Menu.Item key={m.id} title={`${m.label} · ${m.detail}`} onPress={async () => { setModelMenu(false); await setModel(ai.provider, m.id); refresh(); }} />
-            ))}
-          </Menu>
-        </View>
-        <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
-          {ai.hasKey && <Button onPress={async () => { await setApiKey(ai.provider, null); refresh(); }}>Remove key</Button>}
-          <Button
-            mode={ai.hasKey ? 'text' : 'contained'}
-            onPress={() => {
-              const {provider} = ai;
-              const p = AI_PROVIDERS[provider];
-              setEdit({title: `${p.company} API key`, label: p.keyLabel, kind: 'text', secure: true, initial: '', hint: p.keyHint, onSave: async (v) => { await setApiKey(provider, v ? String(v) : null); refresh(); }});
-            }}
-          >
-            {ai.hasKey ? 'Change key' : 'Add key'}
-          </Button>
-          {ai.hasKey && <Button mode="contained" onPress={() => router.push('/ask')}>Open</Button>}
-        </View>
-      </Panel>
+      </CollapsiblePanel>
 
       <SectionHeader title="Advanced" />
-      <Panel>
-        <PanelHeader title="Old tracker data" subtitle="Your counts from the previous version of the app" icon="history" color={chart.series[3]} />
+      <CollapsiblePanel id="settings.legacy" title="Old tracker data" subtitle="Your counts from the previous version of the app" icon="history" color={chart.series[3]}>
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
           <Button onPress={async () => setDialog({title: 'Old tracker import', body: formatImportReport(await getLegacyImportReport())})}>View report</Button>
           <Button onPress={reimport}>Import again</Button>
         </View>
-      </Panel>
-      <Panel>
-        <PanelHeader title="Debug" icon="bug-outline" color={chart.inkMuted} />
+      </CollapsiblePanel>
+      <CollapsiblePanel id="settings.debug" title="Debug" icon="bug-outline" color={chart.inkMuted}>
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
           <Button onPress={activityCheck}>Activity data check</Button>
           <Button
@@ -492,7 +504,7 @@ export default function SettingsScreen() {
           <Button onPress={reload}>Reload</Button>
           <Button onPress={async () => setDialog({title: 'Stored data', body: JSON.stringify(await dumpDatabase(), null, 2)})}>Show stored data</Button>
         </View>
-      </Panel>
+      </CollapsiblePanel>
 
       <EditValueDialog spec={edit} onDismiss={() => setEdit(null)} />
       <Portal>

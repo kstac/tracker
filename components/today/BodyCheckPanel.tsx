@@ -1,7 +1,7 @@
 import {View} from 'react-native';
 import {router} from 'expo-router';
 import {Text} from 'react-native-paper';
-import {Panel, PanelHeader} from '@/components/ui/Panel';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
 import {BodyCheck, RadarLevel, TIER_LABEL, Vital, VitalTier} from '@/insights';
 import {round} from '@/insights/stats';
 import {AppTheme, useAppTheme} from '@/theme';
@@ -76,27 +76,40 @@ export function radarText(check: BodyCheck): string {
   return `${lead}: ${radar.hits.map((h) => h.text).join('; ')}.${radar.explanation ? ` ${radar.explanation}` : ''}`;
 }
 
+export function bodyCheckSummary(check: BodyCheck): string {
+  const off = check.vitals.filter((v) => v.ready && (v.tier === 'slightly_off' || v.tier === 'notably_off'));
+  if (check.radar.level !== 'none') return check.radar.level === 'major' ? 'Strong signs of strain' : 'Some signs of strain';
+  if (!off.length) return 'All typical';
+  return off.map((v) => `${v.label} ${TIER_LABEL[v.tier].toLowerCase()}`).join(' · ');
+}
+
 export default function BodyCheckPanel({check}: {check: BodyCheck}) {
   const {chart} = useAppTheme();
   const {radar} = check;
   if (!check.vitals.length) return null;
   const color = radarColor(radar.level, chart);
+  const anyOff = radar.level !== 'none' || check.vitals.some((v) => v.ready && v.tier === 'notably_off');
+  const summary = bodyCheckSummary(check);
   return (
-    <Panel onPress={() => router.push('/body')}>
-      <PanelHeader
-        title="Body check"
-        subtitle="Last night's vitals against your normal range"
-        icon={radar.level === 'none' ? 'shield-check-outline' : 'shield-alert-outline'}
-        color={color}
-      />
+    <CollapsiblePanel
+      id="today.body_check"
+      title="Body check"
+      subtitle="Last night's vitals against your normal range"
+      summary={summary}
+      summaryColor={summary === 'All typical' ? chart.status.good : radar.level !== 'none' ? color : chart.status.warning}
+      icon={radar.level === 'none' ? 'shield-check-outline' : 'shield-alert-outline'}
+      color={color}
+      defaultOpen={anyOff}
+      onPress={() => router.push('/body')}
+    >
       <View style={{gap: 12}}>
         {check.vitals.map((v) => <VitalRow key={v.metric} vital={v} />)}
       </View>
       <View style={{marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: chart.grid, gap: 8}}>
         <Text variant="bodySmall" style={{color: radar.level === 'none' ? chart.inkSecondary : color}}>{radarText(check)}</Text>
         <RadarStrip history={check.history} />
-        <Text variant="labelSmall" style={{color: chart.inkMuted}}>Strain signals over the last 30 days</Text>
+        <Text variant="labelSmall" style={{color: chart.inkMuted}}>Strain over the last 30 days · tap for history</Text>
       </View>
-    </Panel>
+    </CollapsiblePanel>
   );
 }

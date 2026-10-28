@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import {View} from 'react-native';
 import {router} from 'expo-router';
 import {Text} from 'react-native-paper';
-import {Panel, PanelHeader} from '@/components/ui/Panel';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
 import {getBodyBatteryEvents} from '@/db/repo';
 import {windowValues} from '@/insights/baseline';
 import {mean} from '@/insights/stats';
@@ -47,19 +47,21 @@ export default function StressPanel({date, daily}: {date: IsoDate; daily: DailyD
   if (stress == null && high == null) return null;
 
   return (
-    <Panel onPress={() => router.push({pathname: '/metric/[id]', params: {id: 'stress_avg'}})}>
-      <PanelHeader
-        title="Stress & energy"
-        subtitle={usual != null && stress != null ? `Usual daily stress ${Math.round(usual)}` : 'So far today'}
-        icon="head-heart-outline"
-        color={chart.category.recovery}
-        right={stress != null ? (
-          <View style={{alignItems: 'flex-end'}}>
-            <Text variant="headlineSmall" style={{color: chart.inkPrimary, fontWeight: '700'}}>{Math.round(stress)}</Text>
-            <Text variant="labelSmall" style={{color: chart.inkMuted}}>{stressWord(stress)}</Text>
-          </View>
-        ) : undefined}
-      />
+    <CollapsiblePanel
+      id="today.stress"
+      title="Stress & energy"
+      subtitle={usual != null && stress != null ? `Usual daily stress ${Math.round(usual)}` : 'So far today'}
+      summary={high != null ? `Body Battery ${low != null ? `${Math.round(low)}–` : ''}${Math.round(high)}${usual != null && stress != null ? ` · usual stress ${Math.round(usual)}` : ''}` : undefined}
+      icon="head-heart-outline"
+      color={chart.category.recovery}
+      right={stress != null ? (
+        <View style={{alignItems: 'flex-end'}}>
+          <Text variant="headlineSmall" style={{color: chart.inkPrimary, fontWeight: '700'}}>{Math.round(stress)}</Text>
+          <Text variant="labelSmall" style={{color: chart.inkMuted}}>{stressWord(stress)}</Text>
+        </View>
+      ) : undefined}
+      onPress={() => router.push({pathname: '/metric/[id]', params: {id: 'stress_avg'}})}
+    >
       {total > 0 && (
         <View style={{gap: 6, marginBottom: 12}}>
           <View style={{flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2}}>
@@ -95,6 +97,6 @@ export default function StressPanel({date, daily}: {date: IsoDate; daily: DailyD
           ))}
         </View>
       )}
-    </Panel>
+    </CollapsiblePanel>
   );
 }

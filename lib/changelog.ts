@@ -2,12 +2,27 @@
  * The app's own version, bumped (minor) with each set of changes. It's kept here rather than in app.json because
  * app.json's version feeds the native fingerprint, and changing it would stop OTA updates reaching existing builds.
  */
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 export type ChangelogEntry = {version: string; date: string; title: string; test: string[]};
 
 /** Newest first. Each item is something to check on the phone. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.3.0',
+    date: '2026-10-28',
+    title: 'Simpler screens and collapsible cards',
+    test: [
+      'Cards with a chevron open and close, and stay that way after closing and reopening the app',
+      'Today: check-in and Log today sit near the top; Body check shows a one-line summary unless something is off',
+      'Today: Tonight, Sleep debt, Activity and Stress start closed with the key number still visible',
+      'Journal is no longer a tab: open it from Log today; past days, notes and new tags still work',
+      'Insights: rows are one sentence each; stressful days and weekends sit under "Other patterns"',
+      'Tag screen: history is a calendar; By day of week starts closed; Details on a pattern shows the breakdown',
+      'Training: top card reads in plain words, workouts are grouped by week',
+      'Settings: sections are grouped and collapsed with summaries; this list closes and reopens for each new version',
+    ],
+  },
   {
     version: '1.2.0',
     date: '2026-10-28',
