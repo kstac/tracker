@@ -25,6 +25,8 @@ export type Score = {
   /** Sleep only: set when the value is Garmin's, with the app's own estimate alongside. */
   source?: 'garmin';
   appValue?: number;
+  /** Sleep only: how many Garmin-scored nights tuned the app's weights. */
+  calibrationNights?: number;
 };
 
 export type InsightKind = 'warning' | 'positive' | 'info';

@@ -15,7 +15,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     test: [
       'Sleep ring on Today shows the same number as Garmin Connect for last night',
       'Tap the Sleep ring: the breakdown still shows, with a note giving the app\'s own estimate',
-      'Breakdown now includes Overnight stress and Body Battery at wake',
+      'Breakdown now includes Overnight stress and Body Battery at wake, and REM/deep are judged against Garmin\'s ranges',
+      'The app\'s own estimate in that note should now sit close to Garmin\'s (it learns from your last 180 Garmin-scored nights)',
       'Readiness may shift a little now that it uses Garmin\'s sleep score',
     ],
   },

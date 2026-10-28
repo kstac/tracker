@@ -55,7 +55,7 @@ describe('computeWeeklySummary', () => {
       'You slept 40m more per night than last week (7h 40m average).',
       'You walked 33% more than last week, about 8,000 steps a day.',
       'Resting heart rate dropped 3 bpm to 53 bpm.',
-      'You hit 175 intensity minutes, above the 150-minute weekly target.',
+      'Readiness averaged 92, 4 points higher than last week.',
     ]);
   });
 

@@ -6,15 +6,15 @@ import {computeSleepScores} from '@/insights/sleepScores';
 describe('scoreSleep', () => {
   it('scores a full, well-timed night as optimal', () => {
     expect(scoreSleep(night(TODAY))).toEqual({
-      value: 99,
+      value: 97,
       label: 'Optimal',
       calibrating: false,
       date: TODAY,
       contributors: [
         {key: 'total', label: 'Total sleep', score: 100, detail: '8h 00m', impact: 0},
         {key: 'efficiency', label: 'Efficiency', score: 100, detail: '97%', impact: 0},
-        {key: 'restfulness', label: 'Restfulness', score: 90, detail: '15m awake', impact: 1},
-        {key: 'rem', label: 'REM sleep', score: 100, detail: '1h 45m', impact: 0},
+        {key: 'restfulness', label: 'Restfulness', score: 78, detail: '15m awake', impact: 3},
+        {key: 'rem', label: 'REM sleep', score: 100, detail: '1h 45m (22%)', impact: 0},
         {key: 'deep', label: 'Deep sleep', score: 100, detail: '1h 30m (19%)', impact: 0},
         {key: 'timing', label: 'Timing', score: 100, detail: 'Midpoint 03:08', impact: 0},
       ],
@@ -23,12 +23,12 @@ describe('scoreSleep', () => {
 
   it('scores a short, restless, late night poorly', () => {
     const score = scoreSleep(night(TODAY, {bed: 60, asleep: 300, deep: 30, rem: 40, awake: 60}))!;
-    expect({value: score.value, label: score.label}).toEqual({value: 39, label: 'Pay attention'});
+    expect({value: score.value, label: score.label}).toEqual({value: 28, label: 'Pay attention'});
   });
 
   it('uses the reported efficiency when given', () => {
     const score = scoreSleep(night(TODAY), {efficiency: 77.5})!;
-    expect(score.contributors.find((c) => c.key === 'efficiency')).toEqual({key: 'efficiency', label: 'Efficiency', score: 50, detail: '78%', impact: 7.5});
+    expect(score.contributors.find((c) => c.key === 'efficiency')).toEqual({key: 'efficiency', label: 'Efficiency', score: 0, detail: '78%', impact: 6.7});
   });
 
   it('skips stage contributors when the night has no stages', () => {
@@ -44,7 +44,7 @@ describe('scoreSleep', () => {
 
 describe('contributor curves', () => {
   it('rewards 8-9 hours and eases off for very long sleep', () => {
-    expect([240, 330, 420, 480, 540, 660].map(totalSleepScore)).toEqual([0, 45, 90, 100, 100, 70]);
+    expect([240, 330, 420, 480, 540, 660].map(totalSleepScore)).toEqual([0, 40, 80, 100, 100, 70]);
   });
 
   it('scores timing against the ideal window, or the personal midpoint when kinder', () => {
@@ -68,8 +68,8 @@ describe('overnight stress and Body Battery', () => {
   it('pull the score down when stress is high and Body Battery is low', () => {
     const score = scoreSleep(night(TODAY), {sleepStress: 35, wakeBattery: 40})!;
     expect(score.contributors.slice(-2)).toEqual([
-      {key: 'stress', label: 'Overnight stress', score: 0, detail: 'Average 35', impact: 8.3},
-      {key: 'recovery', label: 'Body Battery at wake', score: 0, detail: '40', impact: 8.3},
+      {key: 'stress', label: 'Overnight stress', score: 0, detail: 'Average 35', impact: 15},
+      {key: 'recovery', label: 'Body Battery at wake', score: 0, detail: '40', impact: 10},
     ]);
   });
 });

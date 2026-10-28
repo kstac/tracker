@@ -4,15 +4,18 @@ import {Score} from '@/insights/types';
 import {clamp, ramp} from '@/insights/stats';
 import {combine, WeightedContributor} from '@/insights/score';
 
-export const SLEEP_WEIGHTS = {
-  total: 0.35,
-  efficiency: 0.15,
+export type SleepPart = 'total' | 'efficiency' | 'restfulness' | 'rem' | 'deep' | 'timing' | 'stress' | 'recovery';
+
+/** Starting weights, loosely following what Garmin's sleep score leans on: duration, overnight stress and stages. */
+export const SLEEP_WEIGHTS: Record<SleepPart, number> = {
+  total: 0.3,
+  stress: 0.15,
+  rem: 0.12,
+  deep: 0.12,
   restfulness: 0.1,
-  rem: 0.15,
-  deep: 0.15,
-  timing: 0.1,
-  stress: 0.1,
   recovery: 0.1,
+  efficiency: 0.05,
+  timing: 0.06,
 };
 
 /** Midpoint window (minutes from midnight) that scores full marks for timing. */
@@ -26,6 +29,8 @@ export type SleepScoreOptions = {
   /** Garmin's average stress while asleep. Garmin's own score leans on this heavily. */
   sleepStress?: number;
   wakeBattery?: number;
+  /** Weights tuned to this user's Garmin scores, replacing SLEEP_WEIGHTS. */
+  weights?: Record<SleepPart, number>;
 };
 
 export function asleepMinutes(night: SleepNight): number {
@@ -43,8 +48,8 @@ export function sleepMidpoint(night: SleepNight): number {
 }
 
 export function totalSleepScore(min: number): number {
-  if (min < 420) return ramp(min, 240, 420, 0, 90);
-  if (min < 480) return ramp(min, 420, 480, 90, 100);
+  if (min < 420) return ramp(min, 240, 420, 0, 80);
+  if (min < 480) return ramp(min, 420, 480, 80, 100);
   if (min <= 540) return 100;
   return ramp(min, 540, 660, 100, 70);
 }
@@ -64,35 +69,38 @@ export function scoreSleep(night: SleepNight, opts: SleepScoreOptions = {}): Sco
   const inBed = (night.endTs - night.startTs) / 60_000;
   const efficiency = opts.efficiency ?? (inBed > 0 ? (asleep / inBed) * 100 : null);
   const midpoint = sleepMidpoint(night);
+  const w = opts.weights ?? SLEEP_WEIGHTS;
 
   const parts: WeightedContributor[] = [
-    {key: 'total', label: 'Total sleep', weight: SLEEP_WEIGHTS.total, score: totalSleepScore(asleep), detail: formatMinutes(asleep)},
+    {key: 'total', label: 'Total sleep', weight: w.total, score: totalSleepScore(asleep), detail: formatMinutes(asleep)},
   ];
   if (efficiency != null) {
     parts.push({
       key: 'efficiency',
       label: 'Efficiency',
-      weight: SLEEP_WEIGHTS.efficiency,
-      score: ramp(efficiency, 65, 90),
+      weight: w.efficiency,
+      score: ramp(efficiency, 80, 95),
       detail: `${Math.round(efficiency)}%`,
     });
   }
   parts.push({
     key: 'restfulness',
     label: 'Restfulness',
-    weight: SLEEP_WEIGHTS.restfulness,
-    score: ramp(night.awakeMin, 60, 10),
+    weight: w.restfulness,
+    score: ramp(night.awakeMin, 50, 5),
     detail: `${formatMinutes(night.awakeMin)} awake`,
   });
   if (hasStages(night)) {
+    // Garmin rates REM against 21-31% of the night and deep sleep against 16-33%.
     const deepPct = (night.deepMin / asleep) * 100;
+    const remPct = (night.remMin / asleep) * 100;
     parts.push(
-      {key: 'rem', label: 'REM sleep', weight: SLEEP_WEIGHTS.rem, score: ramp(night.remMin, 30, 90), detail: formatMinutes(night.remMin)},
+      {key: 'rem', label: 'REM sleep', weight: w.rem, score: ramp(remPct, 10, 21), detail: `${formatMinutes(night.remMin)} (${Math.round(remPct)}%)`},
       {
         key: 'deep',
         label: 'Deep sleep',
-        weight: SLEEP_WEIGHTS.deep,
-        score: ramp(deepPct, 5, 16),
+        weight: w.deep,
+        score: ramp(deepPct, 8, 16),
         detail: `${formatMinutes(night.deepMin)} (${Math.round(deepPct)}%)`,
       },
     );
@@ -100,15 +108,15 @@ export function scoreSleep(night: SleepNight, opts: SleepScoreOptions = {}): Sco
   parts.push({
     key: 'timing',
     label: 'Timing',
-    weight: SLEEP_WEIGHTS.timing,
+    weight: w.timing,
     score: timingScore(midpoint, opts.personalMidpoint),
     detail: `Midpoint ${formatClock(midpoint)}`,
   });
   if (opts.sleepStress != null) {
-    parts.push({key: 'stress', label: 'Overnight stress', weight: SLEEP_WEIGHTS.stress, score: ramp(opts.sleepStress, 35, 15), detail: `Average ${Math.round(opts.sleepStress)}`});
+    parts.push({key: 'stress', label: 'Overnight stress', weight: w.stress, score: ramp(opts.sleepStress, 30, 10), detail: `Average ${Math.round(opts.sleepStress)}`});
   }
   if (opts.wakeBattery != null) {
-    parts.push({key: 'recovery', label: 'Body Battery at wake', weight: SLEEP_WEIGHTS.recovery, score: ramp(opts.wakeBattery, 40, 85), detail: String(Math.round(opts.wakeBattery))});
+    parts.push({key: 'recovery', label: 'Body Battery at wake', weight: w.recovery, score: ramp(opts.wakeBattery, 40, 90), detail: String(Math.round(opts.wakeBattery))});
   }
   return combine(parts, night.date, false);
 }

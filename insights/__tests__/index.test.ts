@@ -28,7 +28,7 @@ describe('computeInsights', () => {
       effects: topEffects(report.effects.effects),
     }).toEqual({
       date: TODAY,
-      sleep: 99,
+      sleep: 97,
       sleepDate: TODAY,
       readinessCalibrating: false,
       activity: 100,

@@ -183,7 +183,7 @@ export default function TodayScreen() {
           title={SCORE_META[openScore].title}
           icon={SCORE_META[openScore].icon}
           score={open}
-          note={openScore === 'sleep' && open.source === 'garmin' ? `Score from Garmin. The breakdown is the app's own look at the night, which would score it ${open.appValue}.` : undefined}
+          note={openScore === 'sleep' && open.source === 'garmin' ? `Score from Garmin. The breakdown is the app's own look at the night, which would score it ${open.appValue}${open.calibrationNights ? ` (tuned to your last ${open.calibrationNights} Garmin scores)` : ''}.` : undefined}
         />
       )}
 
