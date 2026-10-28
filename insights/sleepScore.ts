@@ -11,6 +11,8 @@ export const SLEEP_WEIGHTS = {
   rem: 0.15,
   deep: 0.15,
   timing: 0.1,
+  stress: 0.1,
+  recovery: 0.1,
 };
 
 /** Midpoint window (minutes from midnight) that scores full marks for timing. */
@@ -21,6 +23,9 @@ export type SleepScoreOptions = {
   efficiency?: number;
   /** The user's usual sleep midpoint, so a consistent late sleeper isn't penalised as hard. */
   personalMidpoint?: number | null;
+  /** Garmin's average stress while asleep. Garmin's own score leans on this heavily. */
+  sleepStress?: number;
+  wakeBattery?: number;
 };
 
 export function asleepMinutes(night: SleepNight): number {
@@ -99,5 +104,11 @@ export function scoreSleep(night: SleepNight, opts: SleepScoreOptions = {}): Sco
     score: timingScore(midpoint, opts.personalMidpoint),
     detail: `Midpoint ${formatClock(midpoint)}`,
   });
+  if (opts.sleepStress != null) {
+    parts.push({key: 'stress', label: 'Overnight stress', weight: SLEEP_WEIGHTS.stress, score: ramp(opts.sleepStress, 35, 15), detail: `Average ${Math.round(opts.sleepStress)}`});
+  }
+  if (opts.wakeBattery != null) {
+    parts.push({key: 'recovery', label: 'Body Battery at wake', weight: SLEEP_WEIGHTS.recovery, score: ramp(opts.wakeBattery, 40, 85), detail: String(Math.round(opts.wakeBattery))});
+  }
   return combine(parts, night.date, false);
 }

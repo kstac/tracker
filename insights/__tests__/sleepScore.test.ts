@@ -1,6 +1,7 @@
 import {describe, expect, it} from '@jest/globals';
 import {scoreSleep, timingScore, totalSleepScore} from '@/insights/sleepScore';
 import {night, TODAY} from '@/insights/__fixtures__/series';
+import {computeSleepScores} from '@/insights/sleepScores';
 
 describe('scoreSleep', () => {
   it('scores a full, well-timed night as optimal', () => {
@@ -48,5 +49,27 @@ describe('contributor curves', () => {
 
   it('scores timing against the ideal window, or the personal midpoint when kinder', () => {
     expect([timingScore(120), timingScore(-90), timingScore(390), timingScore(390, 390), timingScore(390, 600)]).toEqual([100, 50, 0, 90, 0]);
+  });
+});
+
+describe('computeSleepScores', () => {
+  it("uses Garmin's score when there is one and keeps the app's breakdown and estimate", () => {
+    const daily = {garmin_sleep_score: new Map([[TODAY, 79]]), sleep_stress: new Map([[TODAY, 25]]), body_battery_wake: new Map([[TODAY, 85]])};
+    const own = scoreSleep(night(TODAY), {sleepStress: 25, wakeBattery: 85})!;
+    expect(computeSleepScores({sleep: [night(TODAY)], daily}).get(TODAY)).toEqual({...own, value: 79, label: 'Good', source: 'garmin', appValue: own.value});
+  });
+
+  it("falls back to the app's own score without a Garmin score", () => {
+    expect(computeSleepScores({sleep: [night(TODAY)], daily: {}}).get(TODAY)).toEqual(scoreSleep(night(TODAY)));
+  });
+});
+
+describe('overnight stress and Body Battery', () => {
+  it('pull the score down when stress is high and Body Battery is low', () => {
+    const score = scoreSleep(night(TODAY), {sleepStress: 35, wakeBattery: 40})!;
+    expect(score.contributors.slice(-2)).toEqual([
+      {key: 'stress', label: 'Overnight stress', score: 0, detail: 'Average 35', impact: 8.3},
+      {key: 'recovery', label: 'Body Battery at wake', score: 0, detail: '40', impact: 8.3},
+    ]);
   });
 });

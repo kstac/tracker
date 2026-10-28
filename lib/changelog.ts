@@ -2,12 +2,23 @@
  * The app's own version, bumped (minor) with each set of changes. It's kept here rather than in app.json because
  * app.json's version feeds the native fingerprint, and changing it would stop OTA updates reaching existing builds.
  */
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 export type ChangelogEntry = {version: string; date: string; title: string; test: string[]};
 
 /** Newest first. Each item is something to check on the phone. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.4.0',
+    date: '2026-10-28',
+    title: "Garmin's sleep score",
+    test: [
+      'Sleep ring on Today shows the same number as Garmin Connect for last night',
+      'Tap the Sleep ring: the breakdown still shows, with a note giving the app\'s own estimate',
+      'Breakdown now includes Overnight stress and Body Battery at wake',
+      'Readiness may shift a little now that it uses Garmin\'s sleep score',
+    ],
+  },
   {
     version: '1.3.0',
     date: '2026-10-28',

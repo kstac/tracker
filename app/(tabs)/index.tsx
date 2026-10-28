@@ -110,7 +110,6 @@ export default function TodayScreen() {
   const plan = report?.sleepPlan ?? null;
   const bedtime = computeBedtimeShift(daily, date);
   const toggle = (key: ScoreKey) => scores[key] && setOpenScore(openScore === key ? null : key);
-  const garminScore = lastNight ? daily.garmin_sleep_score?.get(lastNight.date) : undefined;
 
   const recentScores = report ? [...report.sleepScores.entries()].filter(([d]) => d < date && d >= addDays(date, -30)).map(([, v]) => v) : [];
   const usualScore = recentScores.length >= 7 ? median(recentScores) : null;
@@ -184,7 +183,7 @@ export default function TodayScreen() {
           title={SCORE_META[openScore].title}
           icon={SCORE_META[openScore].icon}
           score={open}
-          note={openScore === 'sleep' && garminScore != null ? `Garmin scored this night ${Math.round(garminScore)}.` : undefined}
+          note={openScore === 'sleep' && open.source === 'garmin' ? `Score from Garmin. The breakdown is the app's own look at the night, which would score it ${open.appValue}.` : undefined}
         />
       )}
 
@@ -249,8 +248,7 @@ export default function TodayScreen() {
           id="today.last_night"
           title={lastNight.date === date ? 'Last night' : nightLabel(lastNight.date)}
           subtitle={`${formatClock(minutesFromMidnight(lastNight.startTs, lastNight.date))} → ${formatClock(minutesFromMidnight(lastNight.endTs, lastNight.date))}` +
-            (bedtime && lastNight.date >= date ? ` · bed ${shiftText(bedtime.lastDelta)}` : '') +
-            (garminScore != null ? ` · Garmin score ${Math.round(garminScore)}` : '')}
+            (bedtime && lastNight.date >= date ? ` · bed ${shiftText(bedtime.lastDelta)}` : '')}
           icon="weather-night"
           color={chart.category.sleep}
           defaultOpen

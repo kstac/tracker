@@ -22,6 +22,9 @@ export type Score = {
   date: IsoDate;
   /** Readiness only: what to do with the day. */
   action?: ReadinessAction;
+  /** Sleep only: set when the value is Garmin's, with the app's own estimate alongside. */
+  source?: 'garmin';
+  appValue?: number;
 };
 
 export type InsightKind = 'warning' | 'positive' | 'info';
